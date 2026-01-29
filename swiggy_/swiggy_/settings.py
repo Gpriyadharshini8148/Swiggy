@@ -37,6 +37,12 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'admin.apps.AdminConfig',
+    'admin.users',
+    'admin.restaurants',
+    'admin.delivery',
+    'admin.access',
 ]
 
 MIDDLEWARE = [
@@ -78,7 +84,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'swiggy_db',
         'USER': 'postgres',
-        'PASSWORD': 'your_password',
+        'PASSWORD': '1234',
         'HOST': 'localhost',
         'PORT': '5432',
     }
