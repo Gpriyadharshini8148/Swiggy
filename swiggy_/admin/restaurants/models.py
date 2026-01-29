@@ -8,6 +8,7 @@ class Restaurant(BaseModel):
     location = models.CharField(max_length=255)
     city = models.ForeignKey(City, on_delete=models.CASCADE)
     rating = models.DecimalField(max_digits=3, decimal_places=2, default=0)
+    category = models.CharField(max_length=100, null=True, blank=True)
     is_active = models.BooleanField(default=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
