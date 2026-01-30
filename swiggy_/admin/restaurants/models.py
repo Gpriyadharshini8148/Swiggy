@@ -1,11 +1,13 @@
 from django.db import models
-from admin.models import BaseModel, City
+from admin.models import BaseModel, City, State
 
 class Restaurant(BaseModel):
     name = models.CharField(max_length=255)
     logo_image_url = models.URLField(null=True, blank=True)
     banner_image_url = models.URLField(null=True, blank=True)
     location = models.CharField(max_length=255)
+    address = models.TextField(null=True, blank=True)
+    state = models.ForeignKey(State, on_delete=models.CASCADE, null=True, blank=True)
     city = models.ForeignKey(City, on_delete=models.CASCADE)
     rating = models.DecimalField(max_digits=3, decimal_places=2, default=0)
     category = models.CharField(max_length=100, null=True, blank=True)
@@ -30,7 +32,7 @@ class FoodItem(BaseModel):
     category = models.ForeignKey(Category, on_delete=models.CASCADE)
     name = models.CharField(max_length=255)
     food_image_url = models.URLField(null=True, blank=True)
-    customization = models.JSONField(null=True, blank=True) # Changed to JSON as per schema 'customization json'
+    customization = models.JSONField(null=True, blank=True)
     price = models.DecimalField(max_digits=10, decimal_places=2)
     discount_type = models.CharField(max_length=20, null=True, blank=True)
     discount_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
@@ -46,12 +48,12 @@ class FoodItem(BaseModel):
 
 class Cart(BaseModel):
     user = models.ForeignKey('users.Users', on_delete=models.CASCADE)
-    food_item = models.ForeignKey(FoodItem, on_delete=models.CASCADE) # As per schema
+    food_item = models.ForeignKey(FoodItem, on_delete=models.CASCADE)
     restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE)
 
 class CartItem(models.Model):
     cart = models.ForeignKey(Cart, on_delete=models.CASCADE)
-    food_item = models.ForeignKey(FoodItem, on_delete=models.CASCADE) # Redundant but requested
+    food_item = models.ForeignKey(FoodItem, on_delete=models.CASCADE)
     quantity = models.IntegerField()
 
 class Coupon(BaseModel):

@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'admin.restaurants',
     'admin.delivery',
     'admin.access',
+    'drf_yasg',
 ]
 
 MIDDLEWARE = [
