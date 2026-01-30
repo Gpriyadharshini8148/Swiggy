@@ -27,7 +27,6 @@ class OrdersViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def place_order(self, request):
         pass
-    
     @action(detail=True, methods=['post'])
     def cancel_order(self, request, pk=None):
         pass

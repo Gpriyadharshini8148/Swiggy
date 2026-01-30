@@ -34,7 +34,11 @@ class FoodItem(BaseModel):
     food_image_url = models.URLField(null=True, blank=True)
     customization = models.JSONField(null=True, blank=True)
     price = models.DecimalField(max_digits=10, decimal_places=2)
-    discount_type = models.CharField(max_length=20, null=True, blank=True)
+    DISCOUNT_CHOICES = (
+        ('Percentage', 'Percentage'),
+        ('Flat', 'Flat'),
+    )
+    discount_type = models.CharField(max_length=20, choices=DISCOUNT_CHOICES, null=True, blank=True)
     discount_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     discounted_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     is_available = models.BooleanField(default=True)
@@ -60,7 +64,11 @@ class Coupon(BaseModel):
     code = models.CharField(max_length=50, unique=True)
     description = models.TextField()
     coupon_image_url = models.URLField(null=True, blank=True)
-    discount_type = models.CharField(max_length=20)
+    DISCOUNT_CHOICES = (
+        ('Percentage', 'Percentage'),
+        ('Flat', 'Flat'),
+    )
+    discount_type = models.CharField(max_length=20, choices=DISCOUNT_CHOICES)
     discount_value = models.DecimalField(max_digits=10, decimal_places=2)
     max_discount_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     min_order_value = models.DecimalField(max_digits=10, decimal_places=2, default=0)

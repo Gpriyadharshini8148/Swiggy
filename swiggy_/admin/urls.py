@@ -22,7 +22,6 @@ router.register(r'cart', CartViewSet, basename='cart')
 router.register(r'coupons', CouponViewSet, basename='coupons')
 router.register(r'orders', OrdersViewSet, basename='orders')
 router.register(r'delivery-partners', DeliveryPartnerViewSet, basename='delivery-partners')
-
 schema_view = get_schema_view(
    openapi.Info(
       title="Swiggy API",
