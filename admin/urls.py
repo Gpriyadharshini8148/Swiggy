@@ -5,6 +5,9 @@ from admin.access.views import AuthViewSet
 from admin.restaurants.views import RestaurantViewSet, CategoryViewSet, FoodItemViewSet, CartViewSet, CouponViewSet
 from admin.delivery.views import OrdersViewSet, DeliveryPartnerViewSet
 from django.views.generic import RedirectView
+from rest_framework import permissions
+from drf_yasg.views import get_schema_view
+from drf_yasg import openapi
 
 router = DefaultRouter()
 router.register(r'auth', AuthViewSet, basename='auth')
@@ -19,10 +22,6 @@ router.register(r'cart', CartViewSet, basename='cart')
 router.register(r'coupons', CouponViewSet, basename='coupons')
 router.register(r'orders', OrdersViewSet, basename='orders')
 router.register(r'delivery-partners', DeliveryPartnerViewSet, basename='delivery-partners')
-
-from rest_framework import permissions
-from drf_yasg.views import get_schema_view
-from drf_yasg import openapi
 
 schema_view = get_schema_view(
    openapi.Info(
