@@ -1,7 +1,6 @@
-from django.urls import path, include
+from django.urls import path, include, re_path
 from rest_framework.routers import DefaultRouter
 from admin.users.views import UsersViewSet, AddressViewSet, WishlistViewSet, RewardsViewSet
-from admin.access.views import AuthViewSet
 from admin.restaurants.views import RestaurantViewSet, CategoryViewSet, FoodItemViewSet, CartViewSet, CouponViewSet
 from admin.delivery.views import OrdersViewSet, DeliveryPartnerViewSet
 from django.views.generic import RedirectView
@@ -10,7 +9,6 @@ from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 
 router = DefaultRouter()
-router.register(r'auth', AuthViewSet, basename='auth')
 router.register(r'users', UsersViewSet, basename='users')
 router.register(r'address', AddressViewSet, basename='address')
 router.register(r'wishlist', WishlistViewSet, basename='wishlist')
@@ -28,7 +26,7 @@ schema_view = get_schema_view(
       default_version='v1',
       description="API documentation for Swiggy",
       terms_of_service="https://www.google.com/policies/terms/",
-      contact=openapi.Contact(email=["gpriyadharshini9965@gmail.com"]),
+      contact=openapi.Contact(email="gpriyadharshini9965@gmail.com"),
       license=openapi.License(name="BSD License"),
    ),
    public=True,
@@ -37,8 +35,9 @@ schema_view = get_schema_view(
 
 urlpatterns = [
     path('', RedirectView.as_view(url='api/', permanent=False)),
+    path('api/', include('admin.access.urls')),
     path('api/', include(router.urls)),
-    path('swagger<format>/', schema_view.without_ui(cache_timeout=0), name='schema-json'),
+    re_path(r'^swagger(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name='schema-json'),
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
 ]

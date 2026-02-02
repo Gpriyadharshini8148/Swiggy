@@ -21,10 +21,8 @@ class Users(BaseModel):
     created_by = models.CharField(max_length=100, null=True, blank=True)
     updated_by = models.CharField(max_length=100, null=True, blank=True)
     deleted_by = models.CharField(max_length=100, null=True, blank=True)
-
     def __str__(self):
         return self.name
-
 class Address(BaseModel):
     user = models.ForeignKey(Users, on_delete=models.CASCADE)
     city = models.ForeignKey(City, on_delete=models.CASCADE)
@@ -34,12 +32,10 @@ class Address(BaseModel):
     pincode = models.CharField(max_length=10)
     is_default = models.BooleanField(default=False)
     address_tag = models.CharField(max_length=50)
-
 class Wishlist(BaseModel):
     user = models.ForeignKey(Users, on_delete=models.CASCADE)
     food_item = models.ForeignKey('restaurants.FoodItem', on_delete=models.CASCADE)
     deleted_at = models.DateTimeField(null=True, blank=True)
-
 class Rewards(models.Model):
     user = models.ForeignKey(Users, on_delete=models.CASCADE)
     points_earned = models.IntegerField(default=0)
