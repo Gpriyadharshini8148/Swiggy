@@ -3,22 +3,60 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import Users,Address,Wishlist,Rewards
 from .serializers import UsersSerializer,AddressSerializer,WishlistSerializer,RewardsSerializer
-from admin.access.permissions import IsSuperAdmin,IsAuthenticatedUser
+from admin.access.permissions import IsSuperAdmin, IsAdmin, IsAuthenticatedUser
 from admin.restaurants.models import FoodItem
 from django.utils import timezone
 from django.contrib.auth.hashers import make_password
 from django.db.models import Sum
+
 class UsersViewSet(viewsets.ModelViewSet):
     queryset=Users.objects.all()
     serializer_class=UsersSerializer
-
     def get_permissions(self):
         if self.action=='list':
-            return [IsSuperAdmin()]
-        elif self.action in ['create','register','login']:
+            return [IsAdmin()]
+        elif self.action in ['register','login']:
             return []
         else:
             return [IsAuthenticatedUser()]
+    def create(self, request, *args, **kwargs):
+        creator_role = None
+        if request.user.is_superuser:
+            creator_role = 'SUPERADMIN'
+        else:
+            user_id = request.session.get('user_id')
+            if user_id:
+                try:
+                    creator_user = Users.objects.get(id=user_id)
+                    creator_role = creator_user.role
+                except Users.DoesNotExist:
+                    pass
+        target_role = request.data.get('role', 'USER')
+        
+        if creator_role == 'SUPERADMIN':
+            pass 
+        elif creator_role == 'ADMIN':
+            if target_role == 'SUPERADMIN':
+                 return Response({"error": "Admins cannot create Super Admins"}, status=status.HTTP_403_FORBIDDEN)
+            if target_role not in ['ADMIN', 'USER']:
+                 return Response({"error": "Admins can only create Admins or Users"}, status=status.HTTP_403_FORBIDDEN)
+
+        else:
+            # Users and others cannot create accounts via this endpoint
+            return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+            
+        # Handle Password Hashing
+        data = request.data.copy()
+        password = data.pop('password', None)
+        if password:
+            data['password_hash'] = make_password(password)
+            
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
     def get_queryset(self):
         if self.request.user.is_superuser:
             return Users.objects.all()
@@ -27,7 +65,7 @@ class UsersViewSet(viewsets.ModelViewSet):
             return Users.objects.none()
         try:
             current_user=Users.objects.get(id=user_id)
-            if current_user.role=='ADMIN':
+            if current_user.role in ['ADMIN', 'SUPERADMIN']: # Allowed listing for SuperAdmin role too
                 return Users.objects.all()
             else:
                 return Users.objects.filter(id=user_id)
@@ -41,6 +79,7 @@ class UsersViewSet(viewsets.ModelViewSet):
     @action(detail=False,methods=['post'])
     def register(self,request):
         data=request.data.copy()
+        data['role'] = 'USER' # Force role to USER
         password=data.pop('password',None)
         if password:
             data['password_hash']=make_password(password)

@@ -39,10 +39,10 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'admin.apps.AdminConfig',
-    'admin.users',
-    'admin.restaurants',
-    'admin.delivery',
-    'admin.access',
+    'admin.apps.UserConfig',
+    'admin.apps.RestaurantConfig',
+    'admin.apps.DeliveryPartnerConfig',
+    'admin.apps.AccessConfig',
     'drf_yasg',
 ]
 
@@ -148,6 +148,7 @@ TWILIO_PHONE_NUMBER = os.environ.get('TWILIO_PHONE_NUMBER')
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
         'swiggy_.csrf_ignore.CsrfExemptSessionAuthentication',
         'rest_framework.authentication.BasicAuthentication',
     ),

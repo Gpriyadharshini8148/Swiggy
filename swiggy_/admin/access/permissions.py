@@ -10,7 +10,19 @@ class IsSuperAdmin(permissions.BasePermission):
             return False
         try:
             user = Users.objects.get(id=user_id)
-            return user.role == 'ADMIN'
+            return user.role == 'SUPERADMIN'
+        except Users.DoesNotExist:
+            return False
+class IsAdmin(permissions.BasePermission):
+    def has_permission(self, request, view):
+        if request.user and request.user.is_superuser:
+            return True
+        user_id = request.session.get('user_id')
+        if not user_id:
+            return False
+        try:
+            user = Users.objects.get(id=user_id)
+            return user.role in ['ADMIN', 'SUPERADMIN']
         except Users.DoesNotExist:
             return False
 class IsAuthenticatedUser(permissions.BasePermission):

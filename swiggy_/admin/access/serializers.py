@@ -5,14 +5,8 @@ class UserAuthSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserAuth
         fields = '__all__'
-
-class SendOtpSerializer(serializers.Serializer):
-    email = serializers.EmailField(required=False)
-    phone = serializers.CharField(max_length=15, required=False)
-
 class VerifyOtpSerializer(serializers.Serializer):
-    email = serializers.EmailField(required=False)
-    phone = serializers.CharField(max_length=15, required=False)
+    contact = serializers.CharField(max_length=100, help_text="Email or Phone Number")
     otp = serializers.CharField(max_length=6)
 
 class LoginSerializer(serializers.Serializer):
@@ -23,3 +17,7 @@ class LoginSerializer(serializers.Serializer):
 class UnifiedLoginSerializer(serializers.Serializer):
     contact = serializers.CharField(max_length=100, help_text="Email or Phone Number")
     password = serializers.CharField(max_length=128, required=False)
+
+class SignupSerializer(serializers.Serializer):
+    contact = serializers.CharField(max_length=100, help_text="Email or Phone Number")
+    password = serializers.CharField(max_length=128, required=True)

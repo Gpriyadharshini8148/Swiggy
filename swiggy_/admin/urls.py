@@ -1,25 +1,12 @@
 from django.urls import path, include, re_path
-from rest_framework.routers import DefaultRouter
-from admin.users.views import UsersViewSet, AddressViewSet, WishlistViewSet, RewardsViewSet
-from admin.restaurants.views import RestaurantViewSet, CategoryViewSet, FoodItemViewSet, CartViewSet, CouponViewSet
-from admin.delivery.views import OrdersViewSet, DeliveryPartnerViewSet
 from django.views.generic import RedirectView
 from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework.reverse import reverse
 
-router = DefaultRouter()
-router.register(r'users', UsersViewSet, basename='users')
-router.register(r'address', AddressViewSet, basename='address')
-router.register(r'wishlist', WishlistViewSet, basename='wishlist')
-router.register(r'rewards', RewardsViewSet, basename='rewards')
-router.register(r'restaurants', RestaurantViewSet, basename='restaurants')
-router.register(r'categories', CategoryViewSet, basename='categories')
-router.register(r'fooditems', FoodItemViewSet, basename='fooditems')
-router.register(r'cart', CartViewSet, basename='cart')
-router.register(r'coupons', CouponViewSet, basename='coupons')
-router.register(r'orders', OrdersViewSet, basename='orders')
-router.register(r'delivery-partners', DeliveryPartnerViewSet, basename='delivery-partners')
 schema_view = get_schema_view(
    openapi.Info(
       title="Swiggy API",
@@ -33,11 +20,32 @@ schema_view = get_schema_view(
    permission_classes=(permissions.AllowAny,),
 )
 
+@api_view(['GET'])
+def api_root(request, format=None):
+    return Response({
+        'auth': reverse('auth-list', request=request, format=format) if 'auth-list' in request.resolver_match.view_name else '/auth/', 
+        'auth': request.build_absolute_uri('auth/'),
+        'users': request.build_absolute_uri('users/'),
+        'restaurants': request.build_absolute_uri('restaurants/'),
+        'delivery': request.build_absolute_uri('delivery/'),
+    })
+
 urlpatterns = [
-    path('', RedirectView.as_view(url='api/', permanent=False)),
-    path('api/', include('admin.access.urls')),
-    path('api/', include(router.urls)),
+    # Top-level API Root
+    path('', api_root, name='api-root'),
+
+    path('auth/', include('admin.access.urls')),
+    path('users/', include('admin.users.urls')),
+    path('restaurants/', include('admin.restaurants.urls')),
+    path('delivery/', include('admin.delivery.urls')),
+
     re_path(r'^swagger(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name='schema-json'),
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
+    
+    # Legacy/Unified Paths
+    path('api/auth/', include('admin.access.urls')),
+    path('api/users/', include('admin.users.urls')),
+    path('api/restaurants/', include('admin.restaurants.urls')),
+    path('api/delivery/', include('admin.delivery.urls')),
 ]
