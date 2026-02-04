@@ -43,10 +43,14 @@ INSTALLED_APPS = [
     'admin.apps.RestaurantConfig',
     'admin.apps.DeliveryPartnerConfig',
     'admin.apps.AccessConfig',
+    'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'drf_yasg',
+    'corsheaders',
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -153,3 +157,5 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.BasicAuthentication',
     ),
 }
+
+CORS_ALLOW_ALL_ORIGINS = True

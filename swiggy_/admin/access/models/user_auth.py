@@ -9,11 +9,13 @@ class UserAuth(BaseModel):
         ('USER', 'User'),
         ('RESTAURANT', 'Restaurant'),
         ('DELIVERY', 'Delivery'),
+        ('SUPERADMIN', 'Super Admin'),
     )
     auth_type = models.CharField(max_length=50, choices=AUTH_TYPE_CHOICES)
     password_hash = models.TextField(null=True, blank=True)
     otp = models.CharField(max_length=10, null=True, blank=True)
     is_verified = models.BooleanField(default=False)
+    is_logged_in = models.BooleanField(default=False)
     last_login = models.DateTimeField(null=True, blank=True)
     def __str__(self):
         return f"Auth for {self.user}"

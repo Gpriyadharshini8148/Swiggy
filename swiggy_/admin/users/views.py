@@ -42,10 +42,7 @@ class UsersViewSet(viewsets.ModelViewSet):
                  return Response({"error": "Admins can only create Admins or Users"}, status=status.HTTP_403_FORBIDDEN)
 
         else:
-            # Users and others cannot create accounts via this endpoint
             return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
-            
-        # Handle Password Hashing
         data = request.data.copy()
         password = data.pop('password', None)
         if password:
@@ -65,7 +62,7 @@ class UsersViewSet(viewsets.ModelViewSet):
             return Users.objects.none()
         try:
             current_user=Users.objects.get(id=user_id)
-            if current_user.role in ['ADMIN', 'SUPERADMIN']: # Allowed listing for SuperAdmin role too
+            if current_user.role in ['ADMIN', 'SUPERADMIN']: 
                 return Users.objects.all()
             else:
                 return Users.objects.filter(id=user_id)
@@ -79,7 +76,7 @@ class UsersViewSet(viewsets.ModelViewSet):
     @action(detail=False,methods=['post'])
     def register(self,request):
         data=request.data.copy()
-        data['role'] = 'USER' # Force role to USER
+        data['role'] = 'USER' 
         password=data.pop('password',None)
         if password:
             data['password_hash']=make_password(password)
