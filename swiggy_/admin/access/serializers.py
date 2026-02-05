@@ -5,6 +5,7 @@ from django.contrib.auth.models import User as AdminUser
 from django.contrib.auth.hashers import check_password
 from admin.users.models import Users
 from django.contrib.auth.models import User as AdminUser
+from admin.users.models import Users
 class UserAuthSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserAuth
@@ -13,7 +14,6 @@ class VerifyOtpSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=100, help_text="Email or Phone Number")
     otp = serializers.CharField(max_length=6)
     def validate(self, attrs):
-        from admin.users.models import Users
         username = attrs.get('username')
         otp = attrs.get('otp')
         user = None
@@ -109,3 +109,31 @@ class LogoutSerializer(serializers.Serializer):
         attrs['user'] = user
         attrs['admin_user'] = admin_user
         return attrs
+
+class CreateAccountSerializer(serializers.Serializer):
+    username = serializers.CharField(max_length=100, help_text="Email or Phone Number")
+    password = serializers.CharField(max_length=128, required=True)
+    role = serializers.ChoiceField(choices=Users.ROLE_CHOICES)
+    admin_type = serializers.ChoiceField(choices=Users.ADMIN_TYPE_CHOICES, required=False, allow_null=True)
+
+    def validate(self, data):
+        from admin.users.models import Users
+        username = data.get('username')
+        if not username:
+            raise serializers.ValidationError("Username is required")
+
+        email = None
+        phone = None
+        
+        if '@' in username:
+            email = username
+        else:
+            phone = username
+            
+        if email and Users.objects.filter(email=email).exists():
+            raise serializers.ValidationError("User with this email already exists")
+            
+        if phone and Users.objects.filter(phone=phone).exists():
+            raise serializers.ValidationError("User with this phone already exists")
+            
+        return data

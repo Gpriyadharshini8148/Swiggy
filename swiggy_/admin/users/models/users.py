@@ -1,6 +1,5 @@
 from django.db import models
-from admin.models import BaseModel, City, State
-
+from admin.models import BaseModel
 from django.core.exceptions import ValidationError
 
 class Users(BaseModel):
@@ -40,21 +39,3 @@ class Users(BaseModel):
     deleted_by = models.CharField(max_length=100, null=True, blank=True)
     def __str__(self):
         return self.name
-class Address(BaseModel):
-    user = models.ForeignKey(Users, on_delete=models.CASCADE)
-    city = models.ForeignKey(City, on_delete=models.CASCADE)
-    state = models.ForeignKey(State, on_delete=models.CASCADE)
-    address_line = models.TextField()
-    landmark = models.CharField(max_length=255, null=True, blank=True)
-    pincode = models.CharField(max_length=10)
-    is_default = models.BooleanField(default=False)
-    address_tag = models.CharField(max_length=50)
-class Wishlist(BaseModel):
-    user = models.ForeignKey(Users, on_delete=models.CASCADE)
-    food_item = models.ForeignKey('restaurants.FoodItem', on_delete=models.CASCADE)
-    deleted_at = models.DateTimeField(null=True, blank=True)
-class Rewards(models.Model):
-    user = models.ForeignKey(Users, on_delete=models.CASCADE)
-    points_earned = models.IntegerField(default=0)
-    points_redeemed = models.IntegerField(default=0)
-    created_at = models.DateTimeField(auto_now_add=True)

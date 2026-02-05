@@ -1,9 +1,9 @@
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models import Orders, Delivery, DeliveryPartner
-from .serializers import OrdersSerializer, DeliverySerializer, DeliveryPartnerSerializer
-from admin.access.permissions import IsSuperAdmin, IsAuthenticatedUser
+from admin.delivery.models import Orders
+from admin.delivery.serializers import OrdersSerializer
+from admin.access.permissions import IsAuthenticatedUser
 from admin.users.models import Users
 
 class OrdersViewSet(viewsets.ModelViewSet):
@@ -26,24 +26,27 @@ class OrdersViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def place_order(self, request):
-        pass
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(user_id=request.session.get('user_id'))
+            return Response(serializer.data, status=201)
+        return Response(serializer.errors, status=400)
+        
     @action(detail=True, methods=['post'])
     def cancel_order(self, request, pk=None):
-        pass
+        order = self.get_object()
+        if order.order_status in ['DELIVERED', 'CANCELLED']:
+             return Response({"error": "Cannot cancel this order"}, status=400)
+        
+        order.order_status = 'CANCELLED'
+        order.save()
+        return Response({"message": "Order cancelled successfully"})
     
     @action(detail=True, methods=['get'])
     def track_order(self, request, pk=None):
-        pass
-
-class DeliveryPartnerViewSet(viewsets.ModelViewSet):
-    queryset = DeliveryPartner.objects.all()
-    serializer_class = DeliveryPartnerSerializer
-    permission_classes = [IsAuthenticatedUser] 
-
-    @action(detail=True, methods=['post'])
-    def update_location(self, request, pk=None):
-        pass
-
-    @action(detail=True, methods=['post'])
-    def accept_order(self, request, pk=None):
-        pass
+        order = self.get_object()
+        return Response({
+            "order_id": order.id,
+            "status": order.order_status,
+            "delivery_partner": order.delivery_partner.name if hasattr(order, 'delivery_partner') and order.delivery_partner else None
+        })

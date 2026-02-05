@@ -5,7 +5,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 router = DefaultRouter()
-router.register(r'auth', AuthViewSet, basename='auth')
+router.register(r'by_super_admin', AuthViewSet, basename='auth')
 @api_view(['GET'])
 def auth_root(request):
     return Response({
@@ -17,8 +17,10 @@ def auth_root(request):
 
 urlpatterns = [
     path('', auth_root, name='auth-root'),
+    path('', include(router.urls)),
     path('login/', AuthViewSet.as_view({'post': 'login'}), name='login'),
     path('signup/', AuthViewSet.as_view({'post': 'signup'}), name='signup'),
     path('verify-otp/', AuthViewSet.as_view({'post': 'verify_otp'}), name='verify-otp'),
     path('logout/', AuthViewSet.as_view({'post': 'logout'}), name='logout'),
 ]
+

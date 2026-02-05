@@ -1,9 +1,12 @@
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
+from django.urls import reverse
 from admin.access.models import UserAuth
 from admin.users.models import Users
-from admin.access.serializers import UserAuthSerializer, VerifyOtpSerializer, LoginSerializer, UnifiedLoginSerializer, SignupSerializer, LogoutSerializer
+from admin.access.serializers import UserAuthSerializer, VerifyOtpSerializer, LoginSerializer, UnifiedLoginSerializer, SignupSerializer, LogoutSerializer, CreateAccountSerializer
+from admin.access.permissions import IsSuperAdmin
 from django.shortcuts import render
 from django.core.mail import send_mail
 import random
@@ -50,6 +53,9 @@ class AuthViewSet(viewsets.GenericViewSet):
 
         try:
             auth_record = UserAuth.objects.get(user=user)
+            if not auth_record.is_verified:
+                return Response({"error": "Account not verified. Please verify your OTP to approve your account."}, status=status.HTTP_403_FORBIDDEN)
+
             if auth_record.is_logged_in:
                  return Response({"error": "User already logged in"}, status=status.HTTP_400_BAD_REQUEST)
             
@@ -100,24 +106,8 @@ class AuthViewSet(viewsets.GenericViewSet):
             )
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-        auth_type_mapping = {
-            'USER': 'USER',
-            'ADMIN': 'ADMIN',
-            'SUPERADMIN': 'ADMIN',
-        }
-        assigned_auth_type = 'USER' # Default
-        if user.role == 'ADMIN':
-            if user.admin_type == 'RESTAURANT':
-                assigned_auth_type = 'RESTAURANT'
-            elif user.admin_type == 'DELIVERY':
-                assigned_auth_type = 'DELIVERY'
-            else:
-                assigned_auth_type = 'ADMIN'
-        elif user.role == 'SUPERADMIN':
-             assigned_auth_type = 'SUPERADMIN'
-        
-        auth_record, created = UserAuth.objects.get_or_create(user=user, defaults={'auth_type': assigned_auth_type})
+        # UserAuth is created by signal
+        auth_record = UserAuth.objects.get(user=user)
         otp = str(random.randint(1000, 9999))
         auth_record.otp = otp
         auth_record.save()
@@ -181,3 +171,136 @@ class AuthViewSet(viewsets.GenericViewSet):
             }, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @swagger_auto_schema(request_body=CreateAccountSerializer)
+    @action(detail=False, methods=['post'], permission_classes=[IsSuperAdmin])
+    def create_account(self, request):
+        serializer = CreateAccountSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        username = serializer.validated_data['username']
+        password = serializer.validated_data['password']
+        role = serializer.validated_data['role']
+        admin_type = serializer.validated_data.get('admin_type', 'NONE')
+
+        email = None
+        phone = None
+        if '@' in username:
+            email = username
+        else:
+            phone = username
+
+        # Check if user already exists before sending email
+        if Users.objects.filter(email=email).exists() or (phone and Users.objects.filter(phone=phone).exists()):
+             return Response({"error": "User with this email/phone already exists"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Prepare data for token
+        user_data = {
+            'email': email,
+            'phone': phone,
+            'name': email.split('@')[0] if email else f"User{phone}",
+            'role': role,
+            'admin_type': admin_type,
+            'password_hash': make_password(password)
+        }
+        
+        from django.core import signing
+        # Sign and dump the data into a token
+        token = signing.dumps(user_data)
+        
+        approve_link = f"{request.scheme}://{request.get_host()}/auth/by_super_admin/approve_account/?token={token}"
+        reject_link = f"{request.scheme}://{request.get_host()}/auth/by_super_admin/reject_account/?token={token}"
+
+        print(f"DEBUG APPROVE LINK: {approve_link}")
+        print(f"DEBUG REJECT LINK: {reject_link}")
+
+        if email:
+            try:
+                message = f"""
+Welcome to Swiggy!
+Your account has been created by the Super Admin.
+Please choose an action to activate your account:
+Approve (Create Account): {approve_link}
+Reject (Ignore): {reject_link}
+"""
+                send_mail(
+                    'Swiggy Account Action Required',
+                    message, 
+                    settings.EMAIL_HOST_USER,
+                    [email],
+                    fail_silently=False
+                )
+            except Exception as e:
+                 print(f"Failed to send email: {e}")
+        elif phone:
+             try:
+                client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+                client.messages.create(
+                    body=f'Swiggy Account Setup.\nApprove: {approve_link}\nReject: {reject_link}',
+                    from_=settings.TWILIO_PHONE_NUMBER,
+                    to=phone
+                )
+             except Exception as e:
+                print(f"Failed to send SMS: {e}")
+
+        return Response({
+            "message": "Account setup initiated. Approval links sent to user. Account will be created upon approval.",
+            # "token": token # Optional: return token for debug if needed, but safer not to expose if not needed
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.AllowAny], authentication_classes=[])
+    def approve_account(self, request):
+        token = request.query_params.get('token')
+        if not token:
+            return Response({"error": "Token is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        from django.core import signing
+        try:
+            # Load data from token (valid for 48 hours)
+            user_data = signing.loads(token, max_age=172800)
+            
+            # Check existence again in case it was created in the meantime
+            if Users.objects.filter(email=user_data['email']).exists() or (user_data['phone'] and Users.objects.filter(phone=user_data['phone']).exists()):
+                 return Response({"message": "Account already registered or verified."}, status=status.HTTP_200_OK)
+            
+            # Create User
+            user = Users.objects.create(
+                email=user_data['email'],
+                phone=user_data['phone'],
+                name=user_data['name'],
+                role=user_data['role'],
+                admin_type=user_data['admin_type'],
+                password_hash=user_data['password_hash']
+            )
+
+            # Determine Auth Type
+            # UserAuth is created by signal. We just need to verify it.
+            auth_record = UserAuth.objects.get(user=user)
+            auth_record.is_verified = True
+            auth_record.save()
+            
+            return Response({"message": "Account Successfully Created and Approved. You can now login."}, status=status.HTTP_201_CREATED)
+            
+        except signing.SignatureExpired:
+             return Response({"error": "Link has expired"}, status=status.HTTP_400_BAD_REQUEST)
+        except signing.BadSignature:
+             return Response({"error": "Invalid link"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+             return Response({"error": f"Creation failed: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.AllowAny], authentication_classes=[])
+    def reject_account(self, request):
+        token = request.query_params.get('token')
+        if not token:
+            return Response({"error": "Token is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        from django.core import signing
+        try:
+            signing.loads(token, max_age=172800)
+            # We just validate the token. Since no account exists, we do nothing.
+            return Response({"message": "Request Rejected. No account was created."}, status=status.HTTP_200_OK)
+            
+        except signing.SignatureExpired:
+             return Response({"error": "Link has expired"}, status=status.HTTP_400_BAD_REQUEST)
+        except signing.BadSignature:
+             return Response({"error": "Invalid link"}, status=status.HTTP_400_BAD_REQUEST)

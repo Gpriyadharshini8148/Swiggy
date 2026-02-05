@@ -10,6 +10,9 @@ class AccessConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'admin.access'
 
+    def ready(self):
+        import admin.access.signals
+
 class UserConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'admin.users'

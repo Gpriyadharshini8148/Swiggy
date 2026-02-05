@@ -5,9 +5,20 @@ class IsSuperAdmin(permissions.BasePermission):
     def has_permission(self, request, view):
         if request.user and request.user.is_superuser:
             return True  
+        
+        if request.auth and 'role' in request.auth:
+             return request.auth.get('role') == 'SUPERADMIN'
+
         user_id = request.session.get('user_id')
+        if not user_id and request.auth:
+             try:
+                user_id = request.auth.get('user_id')
+             except:
+                pass
+        
         if not user_id:
             return False
+            
         try:
             user = Users.objects.get(id=user_id)
             return user.role == 'SUPERADMIN'

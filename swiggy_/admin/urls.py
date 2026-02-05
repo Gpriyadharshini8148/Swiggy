@@ -45,6 +45,7 @@ urlpatterns = [
     
     # Legacy/Unified Paths
     path('api/auth/', include('admin.access.urls')),
+    path('api/access/', include('admin.access.urls')),
     path('api/users/', include('admin.users.urls')),
     path('api/restaurants/', include('admin.restaurants.urls')),
     path('api/delivery/', include('admin.delivery.urls')),

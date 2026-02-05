@@ -143,12 +143,17 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com' 
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'gpriyadharshini9965@gmail.com')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', 'change-me')
 
-TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID')
-TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN')
-TWILIO_PHONE_NUMBER = os.environ.get('TWILIO_PHONE_NUMBER')
+TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID', 'change-me')
+TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', 'change-me')
+TWILIO_PHONE_NUMBER = os.environ.get('TWILIO_PHONE_NUMBER', '+910000000000')
+
+try:
+    from .local_settings import *
+except ImportError:
+    pass
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
