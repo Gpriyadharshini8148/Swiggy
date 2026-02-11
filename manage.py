@@ -6,6 +6,7 @@ import sys
 
 def main():
     """Run administrative tasks."""
+    sys.path.append(os.path.join(os.getcwd(), 'swiggy_'))
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'swiggy_.settings')
     try:
         from django.core.management import execute_from_command_line

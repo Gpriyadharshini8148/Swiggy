@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Restaurant, Category, FoodItem, Cart, CartItem, Coupon
+from .models import Restaurant, Category, SubCategory, FoodItem, Cart, CartItem, Coupon
 
 @admin.register(Restaurant)
 class RestaurantAdmin(admin.ModelAdmin):
@@ -11,10 +11,16 @@ class CategoryAdmin(admin.ModelAdmin):
     list_display = ('name',)
     search_fields = ('name',)
 
+@admin.register(SubCategory)
+class SubCategoryAdmin(admin.ModelAdmin):
+    list_display = ('name', 'category')
+    list_filter = ('category',)
+    search_fields = ('name',)
+
 @admin.register(FoodItem)
 class FoodItemAdmin(admin.ModelAdmin):
-    list_display = ('name', 'restaurant', 'category', 'price', 'is_available')
-    list_filter = ('restaurant', 'category', 'is_available', 'is_veg')
+    list_display = ('name', 'restaurant', 'category', 'sub_category', 'price', 'is_veg', 'is_both', 'is_available')
+    list_filter = ('restaurant', 'category', 'sub_category', 'is_veg', 'is_both', 'is_available')
     search_fields = ('name',)
 
 @admin.register(Coupon)
@@ -25,3 +31,7 @@ class CouponAdmin(admin.ModelAdmin):
 @admin.register(Cart)
 class CartAdmin(admin.ModelAdmin):
     list_display = ('user', 'restaurant')
+
+@admin.register(CartItem)
+class CartItemAdmin(admin.ModelAdmin):
+    list_display = ('cart', 'food_item', 'quantity')

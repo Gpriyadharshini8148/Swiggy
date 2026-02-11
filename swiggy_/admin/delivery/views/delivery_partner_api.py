@@ -5,32 +5,13 @@ from admin.delivery.models import DeliveryPartner, Orders, Delivery
 from admin.delivery.serializers import DeliveryPartnerSerializer, DeliverySerializer
 from admin.access.permissions import IsAuthenticatedUser
 from django.utils import timezone
-import random
 class DeliveryPartnerViewSet(viewsets.ModelViewSet):
     queryset = DeliveryPartner.objects.all()
     serializer_class = DeliveryPartnerSerializer
     permission_classes = [IsAuthenticatedUser] 
-    @action(detail=False,methods=['post'])
-    def register(self,request):
-        try:
-            partner=DeliveryPartner.objects.create(
-                name=request.data.get('name'),
-                phone=request.data.get('phone'),
-                email=request.data.get('email'),
-                profile_image_url=request.data.get('profile_image_url'),
-                vehicle_type=request.data.get('vehicle_type'),
-                vehicle_number=request.data.get('vehicle_number'),
-                licence_number=request.data.get('licence_number'),
-                #rating=request.data.get('rating'),
-                #total_deliveries=request.data.get('total_deliveries'),'''
-                is_verified=request.data.get('is_verified'),
-                is_active=request.get.data('is_active')
-            )
-            return Response({'message':'delivery partner registered successful','partner':partner.id ,'detail':'details collected but not verified'},status=201)
-        except Exception as e:
-            return Response({'error':str(e)},status=400)
+
     @action(detail=True,methods=['patch'])
-    def status(self,request):
+    def status_detail(self,request):
         partner=self.get_object()
         if not partner.is_verified:
             return Response({'message':'delivery partner not verified'},status=403)
@@ -45,7 +26,7 @@ class DeliveryPartnerViewSet(viewsets.ModelViewSet):
         else:
             return Response({'message':'invalid status provided right now the delivery partner is un available'})
     @action(detail=True,methods=['post'])
-    def update_location(self,request):
+    def update_location_detail(self,request):
         partner=self.get_object()
         latitude=request.data.get('latitude')
         lagitude=request.data.get('lagitude')
@@ -55,7 +36,7 @@ class DeliveryPartnerViewSet(viewsets.ModelViewSet):
             return Response({'error':'lagitude is requierd'},status=400)
         return Response({"message":"location updated successfully"},status=203)
     @action(detail=True, methods=['post'])
-    def accept_order(self, request, pk=None):
+    def accept_order_detail(self, request, pk=None):
         partner = self.get_object()
         order_id = request.data.get('order_id')         
         if not order_id:
@@ -76,7 +57,6 @@ class DeliveryPartnerViewSet(viewsets.ModelViewSet):
                 delivery.delivery_partner = partner
                 delivery.delivery_status = 'ASSIGNED'
                 delivery.save()
-
             order.order_status = 'ASSIGNED'
             order.save()
             
@@ -84,21 +64,18 @@ class DeliveryPartnerViewSet(viewsets.ModelViewSet):
         except Orders.DoesNotExist:
             return Response({"error": "Order not found"}, status=404)
     @action(detail=True, methods=['post'])
-    def reject_order(self, request, pk=None):
+    def reject_order_detail(self, request, pk=None):
         partner = self.get_object()
         order_id = request.data.get('order_id')
         return Response({"message": "Order rejected. Looking for next partner."})
-
     @action(detail=True, methods=['post'])
-    def update_delivery_status(self, request, pk=None):
+    def update_delivery_status_detail(self, request, pk=None):
         partner = self.get_object()
         delivery_id = request.data.get('delivery_id')
         new_status = request.data.get('status')
-        
         valid_statuses = ['REACHED_RESTAURANT', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED']
         if new_status not in valid_statuses:
-             return Response({"error": "Invalid status. Allowed: {}".format(valid_statuses)}, status=400)
-             
+             return Response({"error":"Invalid status. Allowed: {}".format(valid_statuses)}, status=400)   
         try:
             delivery = Delivery.objects.get(id=delivery_id, delivery_partner=partner)
             delivery.delivery_status = new_status

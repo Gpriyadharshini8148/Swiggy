@@ -13,9 +13,7 @@ class AccessConfig(AppConfig):
     def ready(self):
         import admin.access.signals
 
-class UserConfig(AppConfig):
-    default_auto_field = 'django.db.models.BigAutoField'
-    name = 'admin.users'
+
 
 class RestaurantConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
@@ -24,3 +22,8 @@ class RestaurantConfig(AppConfig):
 class DeliveryPartnerConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'admin.delivery'
+
+class UserConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'admin.user'
+

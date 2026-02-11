@@ -1,9 +1,11 @@
 from django.db import models
-from admin.models import BaseModel
+from admin.access.models import BaseModel
 from .food_item import FoodItem
 from .restaurant import Restaurant
 
 class Cart(BaseModel):
-    user = models.ForeignKey('users.Users', on_delete=models.CASCADE)
-    food_item = models.ForeignKey(FoodItem, on_delete=models.CASCADE)
-    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE)
+    user = models.ForeignKey('access.Users', on_delete=models.CASCADE)
+    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, null=True, blank=True)
+
+    def __str__(self):
+        return f"Cart for {self.user.username}"

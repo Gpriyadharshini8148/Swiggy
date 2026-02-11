@@ -25,7 +25,7 @@ def api_root(request, format=None):
     return Response({
         'auth': reverse('auth-list', request=request, format=format) if 'auth-list' in request.resolver_match.view_name else '/auth/', 
         'auth': request.build_absolute_uri('auth/'),
-        'users': request.build_absolute_uri('users/'),
+
         'restaurants': request.build_absolute_uri('restaurants/'),
         'delivery': request.build_absolute_uri('delivery/'),
     })
@@ -35,7 +35,7 @@ urlpatterns = [
     path('', api_root, name='api-root'),
 
     path('auth/', include('admin.access.urls')),
-    path('users/', include('admin.users.urls')),
+
     path('restaurants/', include('admin.restaurants.urls')),
     path('delivery/', include('admin.delivery.urls')),
 
@@ -46,7 +46,11 @@ urlpatterns = [
     # Legacy/Unified Paths
     path('api/auth/', include('admin.access.urls')),
     path('api/access/', include('admin.access.urls')),
-    path('api/users/', include('admin.users.urls')),
+
     path('api/restaurants/', include('admin.restaurants.urls')),
     path('api/delivery/', include('admin.delivery.urls')),
+
+    # User V1 APIs
+    path('api/v1/', include('admin.user.urls')),
 ]
+

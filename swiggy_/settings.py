@@ -39,7 +39,6 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'admin.apps.AdminConfig',
-    'admin.users',
     'admin.restaurants',
     'admin.delivery',
     'admin.access',
@@ -136,7 +135,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'admin.access.authenticator.CustomJWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ),
 }

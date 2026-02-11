@@ -1,38 +1,70 @@
 from rest_framework import serializers
-from .models import UserAuth
-from admin.users.models import Users
+from .models import Users, Address, Wishlist, Rewards, City, State
+from admin.restaurants.models.restaurant import Restaurant
 from django.contrib.auth.models import User as AdminUser
 from django.contrib.auth.hashers import check_password
-from admin.users.models import Users
-from django.contrib.auth.models import User as AdminUser
-from admin.users.models import Users
-class UserAuthSerializer(serializers.ModelSerializer):
+from django.contrib.auth.password_validation import validate_password
+import re
+from django.db.models import Q
+from django.core.cache import cache
+from admin.delivery.models.delivery_partner import DeliveryPartner
+from admin.restaurants.models.restaurant import Restaurant
+class UsersSerializer(serializers.ModelSerializer):
     class Meta:
-        model = UserAuth
+        model = Users
         fields = '__all__'
+        extra_kwargs = {
+            'password_hash': {'write_only': True},
+            'deleted_at': {'read_only': True},
+            'created_by': {'read_only': True},
+            'updated_by': {'read_only': True},
+            'deleted_by': {'read_only': True},
+        }
+
+class AddressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Address
+        fields = '__all__'
+
+class WishlistSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Wishlist
+        fields = '__all__'
+
+class RewardsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Rewards
+        fields = '__all__'
+
+class StateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = State
+        fields = '__all__'
+
+class CitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = City
+        fields = '__all__'
+
+
+
 class VerifyOtpSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=100, help_text="Email or Phone Number")
     otp = serializers.CharField(max_length=6)
+    
     def validate(self, attrs):
         username = attrs.get('username')
         otp = attrs.get('otp')
+        
         user = None
         if '@' in username:
              user = Users.objects.filter(email=username).first()
         else:
              user = Users.objects.filter(phone=username).first()
         
-        if not user:
-            raise serializers.ValidationError({"username": "User not found for provided username"})
-            
-        try:
-            auth_record = UserAuth.objects.get(user=user)
-            if auth_record.otp != otp:
-                raise serializers.ValidationError({"otp": "Invalid OTP"})
-        except UserAuth.DoesNotExist:
-             raise serializers.ValidationError("OTP request not found")
+        if user:
+            attrs['user'] = user
         
-        attrs['user'] = user
         return attrs
 
 class LoginSerializer(serializers.Serializer):
@@ -45,19 +77,77 @@ class UnifiedLoginSerializer(serializers.Serializer):
     password = serializers.CharField(max_length=128)
 
     def validate(self, attrs):
-        from admin.users.models import Users
-        from django.contrib.auth.hashers import check_password
         username = attrs.get('username')
         password = attrs.get('password')
         
         user = None
         if '@' in username:
+            username = username.lower()
             user = Users.objects.filter(email=username).first()
         else:
             user = Users.objects.filter(phone=username).first()
             
         if not user:
-             raise serializers.ValidationError("User not found")
+            # Check for Super Admin (Django User)
+            try:
+                admin_user = None
+                if '@' in username:
+                    admin_user = AdminUser.objects.filter(email=username).first()
+                else:
+                    admin_user = AdminUser.objects.filter(username=username).first()
+                
+                if admin_user and check_password(password, admin_user.password):
+                    admin_user.role = 'SUPERADMIN' 
+                    attrs['user'] = admin_user
+                    return attrs
+            except Exception:
+                pass
+
+            # Check for Approved but NOT yet created user in Cache
+            activation_data = cache.get(f"approved_activation_{username}")
+            if activation_data:
+                data = activation_data['data']
+                if check_password(password, data['password_hash']):
+                    act_type = activation_data['type']
+                    
+                    # Create User
+                    user = Users.objects.create(
+                        email=data.get('email'),
+                        phone=data.get('phone'),
+                        username=data.get('name') or data.get('restaurant_name') or data.get('username'),
+                        role=data.get('role', 'ADMIN'),
+                        admin_type=data.get('admin_type', 'NONE'),
+                        password_hash=data['password_hash'],
+                        is_verified=True,
+                        created_by=data.get('created_by')
+                    )
+
+                    # Create Specific Profiles if needed
+                    if act_type == 'restaurant':
+                        user.admin_type = 'RESTAURANT_ADMIN'
+                        user.save()
+                        city = City.objects.get(id=data['city_id'])
+                        state = State.objects.get(id=data['state_id']) if data.get('state_id') else None
+                        Restaurant.objects.create(
+                            user=user,
+                            name=data['restaurant_name'],
+                            location=data['location'],
+                            address=data['address'],
+                            city=city,
+                            state=state,
+                            category=data.get('category'),
+                            is_active=True
+                        )
+
+                    
+                    # Clear cache
+                    cache.delete(f"approved_activation_{username}")
+                    attrs['user'] = user
+                    return attrs
+                else:
+                    raise serializers.ValidationError("Invalid Password")
+
+            raise serializers.ValidationError(f"User '{username}' not found. If this is a new account, it may still be pending approval or the approval link may have expired.")
              
         if user.password_hash and check_password(password, user.password_hash):
             attrs['user'] = user
@@ -70,7 +160,6 @@ class SignupSerializer(serializers.Serializer):
     password = serializers.CharField(max_length=128, required=True)
 
     def validate(self, data):
-        from admin.users.models import Users
         username = data.get('username')
         if not username:
              raise serializers.ValidationError("Username is required")
@@ -80,14 +169,40 @@ class SignupSerializer(serializers.Serializer):
         
         if '@' in username:
             email = username
+            email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if not re.match(email_regex, email):
+                raise serializers.ValidationError("Enter a valid email address.")
         else:
             phone = username
+            if not phone.isdigit():
+                 raise serializers.ValidationError("Enter a valid phone number (digits only) or email address.")
             
-        if email and Users.objects.filter(email=email).exists():
-            raise serializers.ValidationError("User with this email already exists")
+        # Combine queries to check if user already exists
+        query = Q()
+        if email:
+            query |= Q(email=email)
+        if phone:
+            query |= Q(phone=phone)
             
-        if phone and Users.objects.filter(phone=phone).exists():
-            raise serializers.ValidationError("User with this phone already exists")
+        if query:
+            existing_user = Users.objects.filter(query).only('email', 'phone').first()
+            if existing_user:
+                if email and existing_user.email == email:
+                    raise serializers.ValidationError("User with this email already exists")
+                if phone and existing_user.phone == phone:
+                    raise serializers.ValidationError("User with this phone already exists")
+            
+        password = data.get('password')
+        if password:
+             # Password complexity validation
+            password_regex = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$'
+            if not re.match(password_regex, password):
+                 raise serializers.ValidationError("Password must contain at least 8 characters, one uppercase letter, one lowercase letter, one number and one special character.")
+
+            try:
+                validate_password(password)
+            except Exception as e:
+                raise serializers.ValidationError(str(e))
             
         return data
 
@@ -109,15 +224,13 @@ class LogoutSerializer(serializers.Serializer):
         attrs['user'] = user
         attrs['admin_user'] = admin_user
         return attrs
-
 class CreateAccountSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=100, help_text="Email or Phone Number")
     password = serializers.CharField(max_length=128, required=True)
     role = serializers.ChoiceField(choices=Users.ROLE_CHOICES)
-    admin_type = serializers.ChoiceField(choices=Users.ADMIN_TYPE_CHOICES, required=False, allow_null=True)
+    admin_type = serializers.ChoiceField(choices=Users.ADMIN_TYPE_CHOICES, default='NONE')
 
     def validate(self, data):
-        from admin.users.models import Users
         username = data.get('username')
         if not username:
             raise serializers.ValidationError("Username is required")
@@ -127,8 +240,13 @@ class CreateAccountSerializer(serializers.Serializer):
         
         if '@' in username:
             email = username
+            email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if not re.match(email_regex, email):
+                raise serializers.ValidationError("Enter a valid email address.")
         else:
             phone = username
+            if not phone.isdigit():
+                 raise serializers.ValidationError("Enter a valid phone number (digits only) or email address.")
             
         if email and Users.objects.filter(email=email).exists():
             raise serializers.ValidationError("User with this email already exists")
@@ -136,4 +254,56 @@ class CreateAccountSerializer(serializers.Serializer):
         if phone and Users.objects.filter(phone=phone).exists():
             raise serializers.ValidationError("User with this phone already exists")
             
+        try:
+            validate_password(data['password'])
+        except Exception as e:
+            raise serializers.ValidationError(str(e))
+            
         return data
+class RestaurantSignupSerializer(serializers.Serializer):
+    username = serializers.CharField(max_length=100, help_text="User Email or Phone Number")
+    password = serializers.CharField(max_length=128, required=True, write_only=True)
+    restaurant_name = serializers.CharField(max_length=255)
+    location = serializers.CharField(max_length=255)
+    address = serializers.CharField(required=False, allow_blank=True)
+    city_id = serializers.IntegerField()
+    state_id = serializers.IntegerField(required=False, allow_null=True)
+    category = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    
+    def validate(self, data):
+        username = data.get('username')
+        if not username:
+             raise serializers.ValidationError("Username is required")
+
+        email = None
+        phone = None
+        
+        if '@' in username:
+            email = username
+            # Email format validation
+            email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if not re.match(email_regex, email):
+                raise serializers.ValidationError("Enter a valid email address.")
+        else:
+            phone = username
+            if not phone.isdigit():
+                 raise serializers.ValidationError("Enter a valid phone number (digits only) or email address.")
+        if email and Users.objects.filter(email=email).exists():
+            raise serializers.ValidationError("User with this email already exists")
+            
+        if phone and Users.objects.filter(phone=phone).exists():
+            raise serializers.ValidationError("User with this phone already exists")
+            
+        password = data['password']
+        # Password complexity validation
+        password_regex = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$'
+        if not re.match(password_regex, password):
+             raise serializers.ValidationError("Password must contain at least 8 characters, one uppercase letter, one lowercase letter, one number and one special character")
+
+        try:
+            validate_password(password)
+        except Exception as e:
+            raise serializers.ValidationError(str(e))
+            
+        return data
+

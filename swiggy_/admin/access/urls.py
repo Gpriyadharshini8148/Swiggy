@@ -1,19 +1,37 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import AuthViewSet
+from .views import AuthViewSet, UsersViewSet, AddressViewSet, WishlistViewSet, RewardsViewSet, StateViewSet, CityViewSet
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 router = DefaultRouter()
-router.register(r'by_super_admin', AuthViewSet, basename='auth')
+router.register(r'account_creation_by_super_admin', AuthViewSet, basename='auth')
+router.register(r'users', UsersViewSet, basename='users')
+router.register(r'address', AddressViewSet, basename='address')
+router.register(r'wishlist', WishlistViewSet, basename='wishlist')
+router.register(r'rewards', RewardsViewSet, basename='rewards')
+router.register(r'states', StateViewSet, basename='states')
+router.register(r'cities', CityViewSet, basename='cities')
+
 @api_view(['GET'])
 def auth_root(request):
-    return Response({
+    urls = {
         'login': request.build_absolute_uri('login/'),
-        'signup': request.build_absolute_uri('signup/'),
         'verify-otp': request.build_absolute_uri('verify-otp/'),
         'logout': request.build_absolute_uri('logout/'),
-    })
+    }
+
+    is_super_admin = False
+    if request.user and request.user.is_authenticated:
+        if getattr(request.user, 'is_superuser', False):
+            is_super_admin = True
+        elif getattr(request.user, 'role', None) == 'SUPERADMIN':
+            is_super_admin = True
+            
+    if is_super_admin:
+        urls['create-account-by-super-admin'] = request.build_absolute_uri('create_account_by_super_admin/')
+        
+    return Response(urls)
 
 urlpatterns = [
     path('', auth_root, name='auth-root'),
@@ -21,6 +39,7 @@ urlpatterns = [
     path('login/', AuthViewSet.as_view({'post': 'login'}), name='login'),
     path('signup/', AuthViewSet.as_view({'post': 'signup'}), name='signup'),
     path('verify-otp/', AuthViewSet.as_view({'post': 'verify_otp'}), name='verify-otp'),
+    path('create_account_by_super_admin/', AuthViewSet.as_view({'post': 'create_account_by_super_admin'}), name='create-account-by-super-admin'),
+    path('restaurant_signup/', AuthViewSet.as_view({'post': 'restaurant_signup'}), name='restaurant-signup'),
     path('logout/', AuthViewSet.as_view({'post': 'logout'}), name='logout'),
 ]
-

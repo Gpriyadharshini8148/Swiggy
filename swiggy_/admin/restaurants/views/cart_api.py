@@ -1,38 +1,120 @@
-from rest_framework import viewsets
+from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from admin.restaurants.models import Cart
-from admin.restaurants.serializers import CartSerializer
+from admin.restaurants.models import Cart, CartItem, FoodItem
+from admin.restaurants.serializers import CartSerializer, CartItemSerializer
+from admin.access.models import Users
 
 class CartViewSet(viewsets.ModelViewSet):
-    queryset = Cart.objects.all()
     serializer_class = CartSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        if user and user.is_authenticated:
+            return Cart.objects.filter(user=user)
+        
+        user_id = self.request.session.get('user_id')
+        if user_id:
+            return Cart.objects.filter(user_id=user_id)
+            
+        return Cart.objects.none()
+
     @action(detail=False, methods=['get'])
     def my_cart(self, request):
-        user_id = request.session.get('user_id')
-        if not user_id:
-            return Response({"error": "User not authenticated"}, status=401)
-        cart_items = Cart.objects.filter(user_id=user_id)
-        serializer = self.get_serializer(cart_items, many=True)
+        cart, created = Cart.objects.get_or_create(user=request.user)
+        serializer = self.get_serializer(cart)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['post'])
+    def add_item(self, request):
+        food_item_id = request.data.get('item_id')
+        quantity = int(request.data.get('qty', 1))
+        
+        try:
+            food_item = FoodItem.objects.get(id=food_item_id)
+            restaurant = food_item.restaurant
+            
+            cart, created = Cart.objects.get_or_create(user=request.user)
+            
+            # Check if cart already has items from a different restaurant
+            if cart.restaurant and cart.restaurant != restaurant:
+                # If there are items in the cart from another restaurant, return conflict
+                if CartItem.objects.filter(cart=cart).exists():
+                    return Response({
+                        "error": "Different restaurant detected",
+                        "message": f"Your cart contains items from {cart.restaurant.name}. Do you want to clear it and add this item?"
+                    }, status=status.HTTP_409_CONFLICT)
+            
+            cart.restaurant = restaurant
+            cart.save()
+            
+            # Add or update item
+            cart_item, created = CartItem.objects.get_or_create(cart=cart, food_item=food_item)
+            if created:
+                cart_item.quantity = quantity
+            else:
+                cart_item.quantity += quantity
+            cart_item.save()
+            
+            return Response(CartSerializer(cart).data, status=status.HTTP_200_OK)
+            
+        except FoodItem.DoesNotExist:
+            return Response({"error": "Food item not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=False, methods=['get'])
+    def price_summary(self, request):
+        try:
+            cart = Cart.objects.get(user=request.user)
+            items = CartItem.objects.filter(cart=cart)
+            
+            if not items.exists():
+                return Response({"error": "Cart is empty"}, status=status.HTTP_404_NOT_FOUND)
+                
+            item_total = sum(item.food_item.price * item.quantity for item in items)
+            gst = item_total * 0.05 # 5% GST
+            packing_charges = 20.00
+            delivery_fee = 30.00
+            discount = 0.00 # Logic for coupons would go here
+            
+            grand_total = float(item_total) + float(gst) + packing_charges + delivery_fee - discount
+            
+            return Response({
+                "item_total": item_total,
+                "gst": gst,
+                "packing_charges": packing_charges,
+                "delivery_fee": delivery_fee,
+                "discount": discount,
+                "grand_total": grand_total
+            })
+        except Cart.DoesNotExist:
+            return Response({"error": "Cart not found"}, status=status.HTTP_404_NOT_FOUND)
+
     @action(detail=False, methods=['post'])
     def clear_cart(self, request):
-        user_id = request.session.get('user_id')
-        if not user_id:
-             return Response({"error": "User not authenticated"}, status=401)
-        Cart.objects.filter(user_id=user_id).delete()
-        return Response({"message": "Cart cleared successfully"})
+        try:
+            cart = Cart.objects.get(user=request.user)
+            CartItem.objects.filter(cart=cart).delete()
+            cart.restaurant = None
+            cart.save()
+            return Response({"message": "Cart cleared successfully"})
+        except Cart.DoesNotExist:
+            return Response({"error": "Cart not found"}, status=status.HTTP_404_NOT_FOUND)
+
     @action(detail=False, methods=['post'])
     def checkout(self, request):
-        user_id = request.session.get('user_id')
-        if not user_id:
-             return Response({"error": "User not authenticated"}, status=401)
-        cart_items = Cart.objects.filter(user_id=user_id)
-        if not cart_items.exists():
-            return Response({"error": "Cart is empty"}, status=400)
-        total_amount = sum(item.food_item.price for item in cart_items)
-        return Response({
-            "message": "Checkout initiated",
-            "total_amount": total_amount,
-            "item_count": cart_items.count()
-        })
+        try:
+            cart = Cart.objects.get(user=request.user)
+            cart_items = CartItem.objects.filter(cart=cart)
+            
+            if not cart_items.exists():
+                return Response({"error": "Cart is empty"}, status=status.HTTP_400_BAD_REQUEST)
+                
+            total_amount = sum(item.food_item.price * item.quantity for item in cart_items)
+            
+            return Response({
+                "message": "Checkout initiated",
+                "total_amount": total_amount,
+                "item_count": cart_items.count()
+            })
+        except Cart.DoesNotExist:
+            return Response({"error": "Cart not found"}, status=status.HTTP_404_NOT_FOUND)

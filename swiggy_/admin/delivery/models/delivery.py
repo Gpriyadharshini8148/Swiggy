@@ -1,5 +1,5 @@
 from django.db import models
-from admin.models import BaseModel
+from admin.access.models import BaseModel
 from .orders import Orders
 from .delivery_partner import DeliveryPartner
 

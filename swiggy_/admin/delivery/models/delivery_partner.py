@@ -1,7 +1,8 @@
 from django.db import models
-from admin.models import BaseModel
+from admin.access.models import BaseModel, Users
 
 class DeliveryPartner(BaseModel):
+    user = models.OneToOneField(Users, on_delete=models.CASCADE, related_name='delivery_profile', null=True, blank=True)
     name = models.CharField(max_length=255)
     phone = models.CharField(max_length=20, unique=True)
     email = models.EmailField(null=True, blank=True)
