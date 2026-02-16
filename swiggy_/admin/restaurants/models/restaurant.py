@@ -1,11 +1,11 @@
-from django.db import models
+from django.contrib.gis.db import models
 from admin.access.models import BaseModel, City, State, Users
 
 class Restaurant(BaseModel):
     name = models.CharField(max_length=255)
     logo_image_url = models.URLField(null=True, blank=True,max_length=500)
     banner_image_url = models.URLField(null=True, blank=True,max_length=500)
-    location = models.CharField(max_length=255)
+    location = models.PointField(srid=4326, blank=True, null=True, help_text="Latitude and Longitude")
     address = models.TextField(null=True, blank=True)
     state = models.ForeignKey(State, on_delete=models.CASCADE, null=True, blank=True)
     city = models.ForeignKey(City, on_delete=models.CASCADE)

@@ -16,12 +16,24 @@ import os
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    # Assuming .env is at the project root (one level up from BASE_DIR)
+    env_path = BASE_DIR.parent / '.env'
+    if env_path.exists():
+        load_dotenv(env_path)
+    else:
+        # Fallback to check BASE_DIR if needed
+        load_dotenv(BASE_DIR / '.env')
+except ImportError:
+    pass
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-&k+m8xb1!8l&#+=4f0*5^&fj0u*ju+$j(xrofe#(sww&yz@ikj'
+SECRET_KEY = os.environ.get('SECRET_KEY', 'default-unsafe-secret-for-dev')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -44,6 +56,7 @@ INSTALLED_APPS = [
     'admin.apps.DeliveryPartnerConfig',
     'admin.apps.AccessConfig',
     'admin.apps.UserConfig',
+    'django.contrib.gis',
 
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
@@ -86,19 +99,48 @@ WSGI_APPLICATION = 'swiggy_.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+# OSGeo4W / GDAL Configuration (Required for PostGIS on Windows)
+if os.name == 'nt':
+    import platform
+    import sys
+    
+    # Check for OSGeo4W first
+    OSGEO4W_ROOT = r'C:\OSGeo4W'
+    if not os.path.exists(OSGEO4W_ROOT):
+        OSGEO4W_ROOT = r'C:\OSGeo4W64'
+    
+    # If standard installer not found, check for pip-installed wheel (osgeo package)
+    if not os.path.exists(OSGEO4W_ROOT):
+        try:
+            import osgeo
+            OSGEO4W_ROOT = os.path.dirname(osgeo.__file__)
+        except ImportError:
+            pass
+
+    if os.path.exists(OSGEO4W_ROOT):
+        os.environ['OSGEO4W_ROOT'] = OSGEO4W_ROOT
+        os.environ['GDAL_DATA'] = os.path.join(OSGEO4W_ROOT, 'data', 'gdal')
+        os.environ['PROJ_LIB'] = os.path.join(OSGEO4W_ROOT, 'data', 'proj')
+        os.environ['PATH'] = OSGEO4W_ROOT + ';' + os.environ['PATH']
+        
+        # Explicitly set library paths if using wheel
+        if 'site-packages' in OSGEO4W_ROOT:
+             GDAL_LIBRARY_PATH = os.path.join(OSGEO4W_ROOT, 'gdal.dll')
+             GEOS_LIBRARY_PATH = os.path.join(OSGEO4W_ROOT, 'geos_c.dll')
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'swiggy_db',
-        'USER': 'postgres',
-        'PASSWORD': '1234',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'ENGINE': 'django.contrib.gis.db.backends.postgis',
+        'NAME': os.environ.get('DB_NAME', 'swiggy_db'),
+        'USER': os.environ.get('DB_USER', 'postgres'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', '1234'),
+        'HOST': os.environ.get('DB_HOST', 'localhost'),
+        'PORT': os.environ.get('DB_PORT', '5432'),
     }
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': True,
@@ -152,15 +194,15 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com' 
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'gpriyadharshini9965@gmail.com')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', 'change-me')
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
 
-TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID', 'change-me')
-TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', 'change-me')
-TWILIO_PHONE_NUMBER = os.environ.get('TWILIO_PHONE_NUMBER', '+910000000000')
+TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID')
+TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN')
+TWILIO_PHONE_NUMBER = os.environ.get('TWILIO_PHONE_NUMBER')
 
-RAZORPAY_KEY_ID = os.environ.get('RAZORPAY_KEY_ID', 'rzp_test_SE2vMrULUJkE2I')
-RAZORPAY_KEY_SECRET = os.environ.get('RAZORPAY_KEY_SECRET', 'rzp_test_SE2vMrULUJkE2I')
+RAZORPAY_KEY_ID = os.environ.get('RAZORPAY_KEY_ID')
+RAZORPAY_KEY_SECRET = os.environ.get('RAZORPAY_KEY_SECRET')
 
 try:
     from .local_settings import *

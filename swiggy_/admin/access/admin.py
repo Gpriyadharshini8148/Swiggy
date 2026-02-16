@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.contrib.gis.admin import OSMGeoAdmin
 from .models import Users, State, City, Address, Rewards, Wishlist
 
 @admin.register(State)
@@ -15,7 +16,7 @@ class UsersAdmin(admin.ModelAdmin):
     list_filter = ('role', 'is_verified')
 
 @admin.register(Address)
-class AddressAdmin(admin.ModelAdmin):
+class AddressAdmin(OSMGeoAdmin):
     list_display = ('user', 'address_tag', 'city', 'state', 'pincode', 'is_default')
     list_filter = ('address_tag', 'is_default')
     search_fields = ('user__username', 'pincode', 'city__name')

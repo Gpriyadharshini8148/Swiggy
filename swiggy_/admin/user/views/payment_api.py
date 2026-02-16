@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from admin.delivery.models.orders import Orders
 from admin.delivery.models.payment import Payment
 from django.conf import settings
+from django.utils import timezone
 import razorpay
 
 @api_view(['POST'])
@@ -11,7 +12,10 @@ import razorpay
 def initiate_payment_api(request):
     order_id = request.data.get('order_id')
     try:
-        order = Orders.objects.get(id=order_id, user=request.user)
+        if getattr(request.user, 'is_superuser', False) or getattr(request.user, 'role', None) == 'SUPERADMIN':
+             order = Orders.objects.get(id=order_id)
+        else:
+             order = Orders.objects.get(id=order_id, user=request.user)
         
         # Initialize Razorpay client
         client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
@@ -27,9 +31,9 @@ def initiate_payment_api(request):
         # Create Payment record
         Payment.objects.create(
             order=order,
-            payment_id=razorpay_order['id'],
+            razorpay_order_id=razorpay_order['id'],
             amount=order.total_amount,
-            status='PENDING',
+            payment_status='PENDING',
             payment_method='RAZORPAY'
         )
         
@@ -63,9 +67,12 @@ def confirm_payment_api(request):
         client.utility.verify_payment_signature(params_dict)
         
         # Update Payment and Order status
-        payment = Payment.objects.get(payment_id=razorpay_order_id)
-        payment.status = 'COMPLETED'
+        payment = Payment.objects.get(razorpay_order_id=razorpay_order_id)
+        payment.payment_status = 'COMPLETED'
+        payment.razorpay_payment_id = razorpay_payment_id
+        payment.razorpay_signature = razorpay_signature
         payment.transaction_id = razorpay_payment_id
+        payment.paid_at = timezone.now()
         payment.save()
         
         order = payment.order

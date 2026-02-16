@@ -1,8 +1,9 @@
 from django.contrib import admin
+from django.contrib.gis.admin import OSMGeoAdmin
 from .models import Restaurant, Category, SubCategory, FoodItem, Cart, CartItem, Coupon
 
 @admin.register(Restaurant)
-class RestaurantAdmin(admin.ModelAdmin):
+class RestaurantAdmin(OSMGeoAdmin):
     list_display = ('name', 'city', 'rating', 'is_active')
     search_fields = ('name', 'location')
     list_filter = ('is_active', 'city')

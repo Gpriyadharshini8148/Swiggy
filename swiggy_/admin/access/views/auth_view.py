@@ -113,8 +113,9 @@ class AuthViewSet(viewsets.GenericViewSet):
                 if not user.is_verified:
                     return Response({"error": "Account not verified. Please verify your OTP to approve your account."}, status=status.HTTP_403_FORBIDDEN)
 
-                if user.is_logged_in:
-                     return Response({"error": "User already logged in"}, status=status.HTTP_400_BAD_REQUEST)
+                # Allow re-login to overwrite previous session
+                # if user.is_logged_in:
+                #      return Response({"error": "User already logged in"}, status=status.HTTP_400_BAD_REQUEST)
                 
                 user.is_logged_in = True
                 user.save()
@@ -217,19 +218,24 @@ class AuthViewSet(viewsets.GenericViewSet):
         }, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(request_body=LogoutSerializer)
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny])
     def logout(self, request):
-        try:
-            if request.user and request.user.is_authenticated:
-                user = request.user
-                if isinstance(user, Users):
-                    user.is_logged_in = False
-                    user.save()
+        serializer = LogoutSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.validated_data.get('user')
+            if user:
+                user.is_logged_in = False
+                user.save()
+                django_logout(request)
+                return Response({"message": "Logout Successful."}, status=status.HTTP_200_OK)
             
-            django_logout(request)
-            return Response({"message": "Logout Successful."}, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            # Handle admin logout if needed (though typically stateless)
+            admin_user = serializer.validated_data.get('admin_user')
+            if admin_user:
+                 django_logout(request)
+                 return Response({"message": "Admin Logout Successful."}, status=status.HTTP_200_OK)
+                 
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @swagger_auto_schema(request_body=CreateAccountSerializer)
     @action(detail=False, methods=['post'], permission_classes=[IsAdmin])

@@ -14,13 +14,16 @@ class Orders(BaseModel):
         ('ACCEPTED', 'Accepted'),
         ('PREPARING', 'Preparing'),
         ('READY', 'Ready for Pickup'),
+        ('REACHED_RESTAURANT', 'Reached Restaurant'),
         ('PICKED_UP', 'Picked Up'),
+        ('OUT_FOR_DELIVERY', 'Out for Delivery'),
         ('DELIVERED', 'Delivered'),
         ('CANCELLED', 'Cancelled'),
     )
     
     order_status = models.CharField(max_length=50, choices=ORDER_STATUS_CHOICES, default='PENDING')
     payment_status = models.CharField(max_length=50, default='PENDING')
+    handover_otp = models.CharField(max_length=6, null=True, blank=True)
     
     # Customer Details
     customer_instructions = models.TextField(null=True, blank=True)

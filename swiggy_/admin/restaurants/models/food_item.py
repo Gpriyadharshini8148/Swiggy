@@ -19,6 +19,9 @@ class FoodItem(BaseModel):
     is_available = models.BooleanField(default=True)
     is_veg = models.BooleanField(default=True)
     is_both = models.BooleanField(default=False)
+    description = models.TextField(null=True, blank=True)
+    rating = models.DecimalField(max_digits=3, decimal_places=1, default=0.0)
+    
     class Meta:
         unique_together = ('restaurant', 'name')
     def __str__(self):

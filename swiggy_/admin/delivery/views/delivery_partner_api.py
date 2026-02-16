@@ -5,6 +5,8 @@ from admin.delivery.models import DeliveryPartner, Orders, Delivery
 from admin.delivery.serializers import DeliveryPartnerSerializer, DeliverySerializer
 from admin.access.permissions import IsAuthenticatedUser
 from django.utils import timezone
+from admin.user.models import Notification
+from admin.delivery.models import Invoice
 class DeliveryPartnerViewSet(viewsets.ModelViewSet):
     queryset = DeliveryPartner.objects.all()
     serializer_class = DeliveryPartnerSerializer
@@ -44,13 +46,13 @@ class DeliveryPartnerViewSet(viewsets.ModelViewSet):
         
         try:
             order = Orders.objects.get(id=order_id)
-            if order.order_status not in ['PENDING', 'READY_FOR_ASSIGNMENT']: 
+            if order.order_status not in ['PENDING', 'ACCEPTED', 'PREPARING', 'READY', 'READY_FOR_ASSIGNMENT']: 
                 return Response({"error": "Order cannot be accepted (Status: {})".format(order.order_status)}, status=400)
             delivery, created = Delivery.objects.get_or_create(order=order, defaults={
                 'delivery_status': 'ASSIGNED',
                 'delivery_partner': partner
             })
-            
+
             if not created:
                 if delivery.delivery_partner and delivery.delivery_partner != partner:
                     return Response({"error": "Order already assigned to another partner"}, status=400)
@@ -86,12 +88,43 @@ class DeliveryPartnerViewSet(viewsets.ModelViewSet):
                 earnings = 20 + (float(order_total) * 0.05) 
                 partner.total_deliveries += 1
                 partner.save()
+                
                 delivery.order.order_status = 'DELIVERED'
                 delivery.order.payment_status = 'PAID' 
+                delivery.order.delivered_timestamp = timezone.now()
                 delivery.order.save()
                 
+                # Generate Invoice
+                # GST 18% Hardcoded for now assuming tax is included or calculated
+                tax_amount = (float(order_total) * 18) / 118 
+                Invoice.objects.create(
+                    order=delivery.order,
+                    amount=order_total,
+                    gst_amount=tax_amount
+                )
+                
                 delivery.save()
-                return Response({"message": "Order Delivered!", "earnings": earnings})
+                
+                # Notification for Order Delivery
+                Notification.objects.create(
+                    user=delivery.order.user,
+                    title="Order Delivered",
+                    message="Your order has been delivered! How was your meal? Please rate us.",
+                    notification_type="Order"
+                )
+                
+                return Response({"message": "Order Delivered! Earnings updated and Invoice generated.", "earnings": earnings})
+            
+            if new_status == 'PICKED_UP':
+                 otp = request.data.get('otp')
+                 if not otp:
+                      return Response({"error": "OTP is required for pickup handover"}, status=400)
+                 
+                 if str(otp) != str(delivery.order.handover_otp):
+                      return Response({"error": "Invalid OTP. Handover failed."}, status=400)
+                      
+                 delivery.order.pickup_timestamp = timezone.now()
+
             delivery.order.order_status = new_status
             delivery.order.save()
             delivery.save()

@@ -13,9 +13,9 @@ from django.db.models import Sum
 
 class IsRestaurantOwner(permissions.BasePermission):
     def has_permission(self, request, view):
-        print(f"User: {request.user}, Role: {getattr(request.user, 'role', 'No Role')}, Superuser: {request.user.is_superuser}")
+        print(f"User: {request.user}, Role: {getattr(request.user, 'role', 'No Role')}, Superuser: {getattr(request.user, 'is_superuser', False)}")
         
-        if request.user.is_superuser:
+        if getattr(request.user, 'is_superuser', False):
             return True
             
         return request.user and request.user.is_authenticated and (getattr(request.user, 'role', None) in ['RESTAURANT', 'SUPERADMIN'])
@@ -25,7 +25,7 @@ class RestaurantDashboardViewSet(viewsets.ViewSet):
 
     def get_restaurant(self, request):
         # Handle Super Admin (Django User)
-        if request.user.is_superuser or getattr(request.user, 'role', None) == 'SUPERADMIN':
+        if getattr(request.user, 'is_superuser', False) or getattr(request.user, 'role', None) == 'SUPERADMIN':
             restaurant_id = request.query_params.get('restaurant_id')
             if restaurant_id:
                 try:
@@ -105,10 +105,23 @@ class RestaurantDashboardViewSet(viewsets.ViewSet):
         if new_status == 'ACCEPTED':
             if order.order_status != 'PENDING':
                 return Response({"error": "Can only accept pending orders"}, status=status.HTTP_400_BAD_REQUEST)
+        elif new_status == 'CANCELLED': # Reject logic
+             if order.order_status == 'DELIVERED':
+                 return Response({"error": "Cannot cancel delivered orders"}, status=status.HTTP_400_BAD_REQUEST)
+             # Basic Refund Logic Placeholder
+             if order.payment_status == 'PAID':
+                 # Initiate Refund via Razorpay/Gateway
+                 pass
+             order.payment_status = 'REFUNDED'
+             
         elif new_status == 'PREPARING':
             order.preparation_timestamp = timezone.now()
         elif new_status == 'READY':
             order.ready_timestamp = timezone.now()
+            # Generate 4-digit OTP
+            import random
+            order.handover_otp = f"{random.randint(100000, 999999)}" 
+            # In a real app, you would send this OTP to the delivery partner via notification/SMS here.
         elif new_status == 'PICKED_UP':
              order.pickup_timestamp = timezone.now()
              # Logic to assign delivery partner could be triggered here or separate
@@ -151,6 +164,55 @@ class RestaurantDashboardViewSet(viewsets.ViewSet):
             "pending_orders": pending_orders,
             "today_revenue": revenue
         })
+    @action(detail=False, methods=['get'])
+    def earnings(self, request):
+        restaurant = self.get_restaurant(request)
+        if not restaurant:
+            return Response({"error": "Restaurant profile not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+        today = timezone.now().date()
+        # You might want to allow filtering by date range here
+        
+        # Calculate daily earnings
+        today_orders = Orders.objects.filter(restaurant=restaurant, created_at__date=today, order_status='DELIVERED')
+        daily_revenue = today_orders.aggregate(total=Sum('total_amount'))['total'] or 0
+        
+        # Simple Logic: 
+        # Platform Commission: 20%
+        # GST: 18% (on commission or total? usually on food bill, but let's say 5% GST on food + commission)
+        # Let's approximate for the dashboard view
+        
+        platform_commission = float(daily_revenue) * 0.20
+        taxes = float(daily_revenue) * 0.05 # 5% GST on food
+        net_earnings = float(daily_revenue) - platform_commission - taxes
+        
+        return Response({
+            "daily_revenue": daily_revenue,
+            "platform_commission": platform_commission,
+            "taxes": taxes,
+            "net_earnings": net_earnings,
+            "date": today
+        })
+
+    @action(detail=False, methods=['patch'])
+    def status(self, request):
+        restaurant = self.get_restaurant(request)
+        if not restaurant:
+            return Response({"error": "Restaurant profile not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+        # Toggle is_active or use a dedicated 'is_open' field if model has one.
+        # Check model: Restaurant has 'is_active'. Let's use that for Open/Close for now.
+        
+        is_open = request.data.get('is_open')
+        if is_open is None:
+             return Response({"error": "is_open field is required (boolean)"}, status=status.HTTP_400_BAD_REQUEST)
+             
+        restaurant.is_active = is_open
+        restaurant.save()
+        
+        status_text = "OPEN" if restaurant.is_active else "CLOSED"
+        return Response({"message": f"Restaurant is now {status_text}", "is_active": restaurant.is_active})
+        
     @action(detail=False, methods=['get'])
     def reviews(self, request):
         restaurant = self.get_restaurant(request)

@@ -11,7 +11,7 @@ class AddressViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticatedUser]
     
     def get_queryset(self):
-        if self.request.user.is_superuser:
+        if getattr(self.request.user, 'is_superuser', False):
             return Address.objects.all()
         user_id = self.request.session.get('user_id')
         if not user_id:

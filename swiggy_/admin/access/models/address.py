@@ -1,4 +1,4 @@
-from django.db import models
+from django.contrib.gis.db import models
 from .state_city import City, State
 from .users import Users
 from .base_model import BaseModel
@@ -11,8 +11,7 @@ class Address(BaseModel):
     address_line_2 = models.TextField(null=True, blank=True)
     landmark = models.CharField(max_length=255, null=True, blank=True)
     pincode = models.CharField(max_length=10)
-    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    location = models.PointField(srid=4326, null=True, blank=True)
     is_default = models.BooleanField(default=False)
     address_tag = models.CharField(max_length=50, default='Home') # Home, Work, etc.
 

@@ -7,12 +7,39 @@ from admin.user.serializers import ReviewSerializer
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def submit_review_api(request):
-    serializer = ReviewSerializer(data=request.data)
+    data = request.data.copy()
+    
+    # 1. Validate Order
+    order_id = data.get('order')
+    if not order_id:
+         return Response({"error": "Order ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    from admin.delivery.models.orders import Orders
+    try:
+        order = Orders.objects.get(id=order_id)
+    except Orders.DoesNotExist:
+        return Response({"error": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+    if order.user != request.user:
+        return Response({"error": "You can only review your own orders"}, status=status.HTTP_403_FORBIDDEN)
+        
+    if order.order_status != 'DELIVERED':
+        return Response({"error": "You can only review delivered orders"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # 2. Add Restaurant and User to data if missing
+    if 'restaurant' not in data:
+        data['restaurant'] = order.restaurant.id
+    elif int(data['restaurant']) != order.restaurant.id:
+        return Response({"error": "Order does not match restaurant"}, status=status.HTTP_400_BAD_REQUEST)
+
+    serializer = ReviewSerializer(data=data)
     if serializer.is_valid():
-        # Ensure user can only review orders they placed
-        # This check could be added if order_id is provided in serializer
-        serializer.save(user=request.user)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        try:
+            serializer.save(user=request.user)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+             
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['GET'])

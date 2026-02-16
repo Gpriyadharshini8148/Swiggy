@@ -19,7 +19,7 @@ class UsersViewSet(viewsets.ModelViewSet):
             return [IsAuthenticatedUser()]
     def create(self, request, *args, **kwargs):
         creator_role = None
-        if request.user.is_superuser:
+        if getattr(request.user, 'is_superuser', False):
             creator_role = 'SUPERADMIN'
         else:
             user_id = request.session.get('user_id')
@@ -76,7 +76,7 @@ class UsersViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def get_queryset(self):
-        if self.request.user.is_superuser:
+        if getattr(self.request.user, 'is_superuser', False):
             return Users.objects.all()
         user_id = self.request.session.get('user_id')
         if not user_id:

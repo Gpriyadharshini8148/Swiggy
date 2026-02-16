@@ -12,19 +12,15 @@ from admin.restaurants.models.restaurant import Restaurant
 class UsersSerializer(serializers.ModelSerializer):
     class Meta:
         model = Users
-        fields = '__all__'
-        extra_kwargs = {
-            'password_hash': {'write_only': True},
-            'deleted_at': {'read_only': True},
-            'created_by': {'read_only': True},
-            'updated_by': {'read_only': True},
-            'deleted_by': {'read_only': True},
-        }
+        model = Users
+        fields = ['id', 'role', 'admin_type', 'username', 'email', 'phone', 'is_verified', 'is_logged_in', 'profile_image_url', 'last_login', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['role', 'admin_type', 'is_verified', 'is_logged_in', 'last_login', 'is_active', 'created_at', 'updated_at', 'created_by', 'updated_by', 'deleted_by', 'deleted_at']
 
 class AddressSerializer(serializers.ModelSerializer):
     class Meta:
         model = Address
-        fields = '__all__'
+        fields = ['id', 'user', 'city', 'state', 'address_line_1', 'address_line_2', 'landmark', 'pincode', 'is_default', 'address_tag', 'created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at']
 
 class WishlistSerializer(serializers.ModelSerializer):
     class Meta:

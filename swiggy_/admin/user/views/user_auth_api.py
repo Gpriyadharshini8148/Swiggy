@@ -10,13 +10,26 @@ class UserAuthViewSet(AuthViewSet):
     
     @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def set_location(self, request):
+        try:
+            from admin.access.models import Users
+        except ImportError:
+            pass
+            
+        user = request.user
+        if not isinstance(user, Users):
+             # Fallback: Try to find Users by username if request.user is a Django User
+             try:
+                 user = Users.objects.get(username=request.user.username)
+             except Users.DoesNotExist:
+                 return Response({"error": "User profile not found."}, status=status.HTTP_404_NOT_FOUND)
+
         serializer = UserAddressSerializer(data=request.data)
         if serializer.is_valid():
-            address = serializer.save(user=request.user)
+            address = serializer.save(user=user)
             
             # Check serviceability
-            lat = address.latitude
-            lng = address.longitude
+            lat = address.location.y if address.location else None
+            lng = address.location.x if address.location else None
             
             if lat and lng:
                 zones = ServiceableZone.objects.filter(is_active=True)
@@ -51,6 +64,17 @@ class UserAuthViewSet(AuthViewSet):
 
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
     def get_addresses(self, request):
-        addresses = Address.objects.filter(user=request.user)
+        try:
+            from admin.access.models import Users
+        except ImportError:
+            pass
+            
+        if getattr(request.user, 'role', None) == 'SUPERADMIN' or getattr(request.user, 'is_superuser', False) or getattr(request.user, 'is_staff', False):
+             addresses = Address.objects.all()
+        elif isinstance(request.user, Users):
+             addresses = Address.objects.filter(user=request.user)
+        else:
+             return Response({"error": "Valid User/User ID required for address access"}, status=status.HTTP_400_BAD_REQUEST)
+
         serializer = UserAddressSerializer(addresses, many=True)
         return Response(serializer.data)

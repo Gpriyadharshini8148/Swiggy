@@ -11,7 +11,11 @@ class CartViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         if user and user.is_authenticated:
-            return Cart.objects.filter(user=user)
+            # Allow super admin to see all carts
+            if getattr(user, 'role', None) == 'SUPERADMIN':
+                return Cart.objects.all()
+            if isinstance(user, Users):
+                return Cart.objects.filter(user=user)
         
         user_id = self.request.session.get('user_id')
         if user_id:
@@ -19,22 +23,53 @@ class CartViewSet(viewsets.ModelViewSet):
             
         return Cart.objects.none()
 
+    def _get_cart_user(self, request):
+        if isinstance(request.user, Users):
+            return request.user
+        
+        if getattr(request.user, 'role', None) == 'SUPERADMIN' or getattr(request.user, 'is_superuser', False) or getattr(request.user, 'is_staff', False):
+            # Check data and query_params for user identifier
+            user_id = (request.data.get('user_id') or 
+                       request.query_params.get('user_id') or 
+                       request.data.get('user') or 
+                       request.query_params.get('user') or
+                       request.session.get('user_id'))
+            
+            if user_id:
+                try:
+                    # In case user_id is passed as a string or int
+                    return Users.objects.get(id=user_id)
+                except (Users.DoesNotExist, ValueError):
+                    return None
+        return None
+
     @action(detail=False, methods=['get'])
     def my_cart(self, request):
-        cart, created = Cart.objects.get_or_create(user=request.user)
+        target_user = self._get_cart_user(request)
+        if not target_user:
+             return Response({"error": "Valid User/User ID required for cart access. Admins must provide 'user' or 'user_id'."}, status=status.HTTP_400_BAD_REQUEST)
+
+        cart, created = Cart.objects.get_or_create(user=target_user)
         serializer = self.get_serializer(cart)
         return Response(serializer.data)
 
     @action(detail=False, methods=['post'])
     def add_item(self, request):
+        target_user = self._get_cart_user(request)
+        if not target_user:
+            return Response({"error": "Valid User/User ID required for cart access. Admins must provide 'user' or 'user_id'."}, status=status.HTTP_400_BAD_REQUEST)
+            
         food_item_id = request.data.get('item_id')
+        if not food_item_id:
+            return Response({"error": "item_id parameter is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
         quantity = int(request.data.get('qty', 1))
         
         try:
             food_item = FoodItem.objects.get(id=food_item_id)
             restaurant = food_item.restaurant
             
-            cart, created = Cart.objects.get_or_create(user=request.user)
+            cart, created = Cart.objects.get_or_create(user=target_user)
             
             # Check if cart already has items from a different restaurant
             if cart.restaurant and cart.restaurant != restaurant:
@@ -49,10 +84,12 @@ class CartViewSet(viewsets.ModelViewSet):
             cart.save()
             
             # Add or update item
-            cart_item, created = CartItem.objects.get_or_create(cart=cart, food_item=food_item)
-            if created:
-                cart_item.quantity = quantity
-            else:
+            cart_item, created = CartItem.objects.get_or_create(
+                cart=cart, 
+                food_item=food_item,
+                defaults={'quantity': quantity}
+            )
+            if not created:
                 cart_item.quantity += quantity
             cart_item.save()
             
@@ -63,15 +100,18 @@ class CartViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def price_summary(self, request):
+        target_user = self._get_cart_user(request)
+        if not target_user:
+            return Response({"error": "Valid User/User ID required for cart access. Admins must provide 'user' or 'user_id'."}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            cart = Cart.objects.get(user=request.user)
+            cart = Cart.objects.get(user=target_user)
             items = CartItem.objects.filter(cart=cart)
             
             if not items.exists():
                 return Response({"error": "Cart is empty"}, status=status.HTTP_404_NOT_FOUND)
                 
             item_total = sum(item.food_item.price * item.quantity for item in items)
-            gst = item_total * 0.05 # 5% GST
+            gst = float(item_total) * 0.05 # 5% GST
             packing_charges = 20.00
             delivery_fee = 30.00
             discount = 0.00 # Logic for coupons would go here
@@ -91,8 +131,11 @@ class CartViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def clear_cart(self, request):
+        target_user = self._get_cart_user(request)
+        if not target_user:
+            return Response({"error": "Valid User/User ID required for cart access. Admins must provide 'user' or 'user_id'."}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            cart = Cart.objects.get(user=request.user)
+            cart = Cart.objects.get(user=target_user)
             CartItem.objects.filter(cart=cart).delete()
             cart.restaurant = None
             cart.save()
@@ -102,8 +145,11 @@ class CartViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def checkout(self, request):
+        target_user = self._get_cart_user(request)
+        if not target_user:
+             return Response({"error": "Valid User/User ID required for cart access. Admins must provide 'user' or 'user_id'."}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            cart = Cart.objects.get(user=request.user)
+            cart = Cart.objects.get(user=target_user)
             cart_items = CartItem.objects.filter(cart=cart)
             
             if not cart_items.exists():

@@ -6,20 +6,25 @@ from rest_framework.response import Response
 from ..models import Payment, Orders
 from ..serializers import PaymentSerializer
 from django.utils import timezone
+from rest_framework import viewsets, status, permissions
 
 client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
-
 class RazorpayPaymentViewSet(viewsets.GenericViewSet):
     serializer_class = PaymentSerializer
+    permission_classes = [permissions.IsAuthenticated]
     
     @action(detail=False, methods=['post'])
     def create_order(self, request):
-        order_id = request.data.get('order_id')
+        order_id = request.data.get('order_id') or request.data.get('order')
         if not order_id:
             return Response({"error": "Order ID is required"}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            order = Orders.objects.get(id=order_id)
+            # Secure check for order ownership
+            if getattr(request.user, 'is_superuser', False) or getattr(request.user, 'role', None) == 'SUPERADMIN':
+                 order = Orders.objects.get(id=order_id)
+            else:
+                 order = Orders.objects.get(id=order_id, user=request.user)
             amount = int(order.total_amount * 100)
             
             data = {
