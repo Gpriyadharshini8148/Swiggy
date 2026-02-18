@@ -13,8 +13,8 @@ class UsersSerializer(serializers.ModelSerializer):
     class Meta:
         model = Users
         model = Users
-        fields = ['id', 'role', 'admin_type', 'username', 'email', 'phone', 'is_verified', 'is_logged_in', 'profile_image_url', 'last_login', 'is_active', 'created_at', 'updated_at']
-        read_only_fields = ['role', 'admin_type', 'is_verified', 'is_logged_in', 'last_login', 'is_active', 'created_at', 'updated_at', 'created_by', 'updated_by', 'deleted_by', 'deleted_at']
+        fields = ['id', 'role', 'username', 'email', 'phone', 'is_verified', 'is_logged_in', 'profile_image', 'last_login', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['role', 'is_verified', 'is_logged_in', 'last_login', 'is_active', 'created_at', 'updated_at', 'created_by', 'updated_by', 'deleted_by', 'deleted_at']
 
 class AddressSerializer(serializers.ModelSerializer):
     class Meta:
@@ -112,7 +112,6 @@ class UnifiedLoginSerializer(serializers.Serializer):
                         phone=data.get('phone'),
                         username=data.get('name') or data.get('restaurant_name') or data.get('username'),
                         role=data.get('role', 'ADMIN'),
-                        admin_type=data.get('admin_type', 'NONE'),
                         password_hash=data['password_hash'],
                         is_verified=True,
                         created_by=data.get('created_by')
@@ -120,7 +119,7 @@ class UnifiedLoginSerializer(serializers.Serializer):
 
                     # Create Specific Profiles if needed
                     if act_type == 'restaurant':
-                        user.admin_type = 'RESTAURANT_ADMIN'
+                        # user.role is already set via data['role'] which should be RESTAURANT_ADMIN
                         user.save()
                         city = City.objects.get(id=data['city_id'])
                         state = State.objects.get(id=data['state_id']) if data.get('state_id') else None
@@ -224,7 +223,7 @@ class CreateAccountSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=100, help_text="Email or Phone Number")
     password = serializers.CharField(max_length=128, required=True)
     role = serializers.ChoiceField(choices=Users.ROLE_CHOICES)
-    admin_type = serializers.ChoiceField(choices=Users.ADMIN_TYPE_CHOICES, default='NONE')
+    role = serializers.ChoiceField(choices=Users.ROLE_CHOICES)
 
     def validate(self, data):
         username = data.get('username')

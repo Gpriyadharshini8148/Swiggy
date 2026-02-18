@@ -5,19 +5,15 @@ from django.core.validators import EmailValidator, RegexValidator
 
 class Users(BaseModel):
     ROLE_CHOICES = (
-        ('SUPERADMIN', 'Super Admin'),
-        ('ADMIN', 'Admin'),
-        ('USER', 'User'),
-    )
-
-    ADMIN_TYPE_CHOICES = (
-        ('SUPERADMIN', 'Super Admin'),
+        ('SUPER_ADMIN', 'Super Admin'),
         ('RESTAURANT_ADMIN', 'Restaurant Admin'),
-        ('NONE', 'None'),
+        ('DELIVERY_ADMIN', 'Delivery Admin'),
+        ('USER', 'User'),
+        ('DELIVERY_PARTNER', 'Delivery Partner'),
     )
     
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, db_index=True)
-    admin_type = models.CharField(max_length=20, choices=ADMIN_TYPE_CHOICES, default='NONE')
+    # admin_type removed as roles are now consolidated
     username = models.CharField(max_length=100) # Renamed from name
     
     email = models.EmailField(
@@ -43,12 +39,12 @@ class Users(BaseModel):
     otp = models.CharField(max_length=10, null=True, blank=True)
     is_verified = models.BooleanField(default=False)
     is_logged_in = models.BooleanField(default=False)
-    profile_image_url = models.URLField(null=True, blank=True,max_length=500)
+    profile_image = models.ImageField(upload_to='users/profiles/', null=True, blank=True)
     last_login = models.DateTimeField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
-        if self.role == 'SUPERADMIN':
-            existing = Users.objects.filter(role='SUPERADMIN')
+        if self.role == 'SUPER_ADMIN':
+            existing = Users.objects.filter(role='SUPER_ADMIN')
             if self.pk:
                 existing = existing.exclude(pk=self.pk)
             if existing.exists():

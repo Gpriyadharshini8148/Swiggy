@@ -36,16 +36,31 @@ def send_otp_email(sender, email, otp, **kwargs):
     executor.submit(send_email_thread, subject, message, [email], from_email=settings.EMAIL_HOST_USER)
 
 @receiver(account_acceptance_email)
-def send_acceptance_email(sender, email, password, approve_link, reject_link, phone=None, **kwargs):
+def send_acceptance_email(sender, email, password, approve_link, reject_link, phone=None, role='USER', **kwargs):
     """
     Signal receiver to send account acceptance email asynchronously.
     """
     print(f"Signal received! Sending acceptance email to {email} in background...")
+    
+    role_message = ""
+    if role == 'DELIVERY_ADMIN':
+        role_message = "You have been granted DELIVERY ADMIN access."
+    elif role == 'RESTAURANT_ADMIN':
+        role_message = "You have been granted RESTAURANT ADMIN access."
+    elif role == 'ADMIN':
+        role_message = "You have been granted ADMIN access."
+    elif role == 'SUPER_ADMIN':
+        role_message = "You have been granted SUPER ADMIN access."
+    else:
+        role_message = "You have been granted USER access."
+
     message = f"""
 Welcome to Swiggy!
 Your account has been initiated by the Super Admin.
 
-Here are your credentials (valid after acceptance):
+{role_message}
+
+Here are your credential (valid after acceptance):
 Username: {email or phone}
 Password: {password}
 
@@ -58,7 +73,7 @@ Click here to ACCEPT (Create & Activate Account):
 Click here to REJECT (Cancel Request):
 {reject_link}
 """
-    subject = 'Swiggy Account Acceptance Request'
+    subject = f'Swiggy Account Acceptance Request - {role.replace("_", " ")}'
     executor.submit(send_email_thread, subject, message, [email], from_email=settings.EMAIL_HOST_USER)
 
 @receiver(restaurant_request_email)

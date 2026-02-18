@@ -13,11 +13,13 @@ class DeliveryPartnerViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticatedUser] 
 
     @action(detail=True,methods=['patch'])
-    def status_detail(self,request):
+    def status_detail(self,request, pk=None):
         partner=self.get_object()
         if not partner.is_verified:
             return Response({'message':'delivery partner not verified'},status=403)
-        is_online=False
+        is_online = request.data.get('is_online')
+        if is_online is None:
+             return Response({'error': 'is_online field is required (boolean)'}, status=400)
         if is_online is True:
             partner.is_active=True
             partner.save()
@@ -28,7 +30,7 @@ class DeliveryPartnerViewSet(viewsets.ModelViewSet):
         else:
             return Response({'message':'invalid status provided right now the delivery partner is un available'})
     @action(detail=True,methods=['post'])
-    def update_location_detail(self,request):
+    def update_location_detail(self,request, pk=None):
         partner=self.get_object()
         latitude=request.data.get('latitude')
         lagitude=request.data.get('lagitude')

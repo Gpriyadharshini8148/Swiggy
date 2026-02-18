@@ -5,7 +5,7 @@ from admin.restaurants.models import Restaurant
 class OrderItemSerializer(serializers.ModelSerializer):
     class Meta:
         model=OrderItem
-        fields=['id', 'order', 'food_item', 'food_name', 'food_image_url', 'quantity', 'price']
+        fields=['id', 'order', 'food_item', 'food_name', 'food_image', 'quantity', 'price']
 
 class OrdersSerializer(serializers.ModelSerializer):
     items=OrderItemSerializer(many=True, read_only=True, source='orderitem_set')
@@ -56,4 +56,4 @@ class DeliverySerializer(serializers.ModelSerializer):
 class DeliveryPartnerSerializer(serializers.ModelSerializer):
     class Meta:
         model=DeliveryPartner
-        fields=['id', 'user', 'name', 'phone', 'email', 'profile_image_url', 'vehicle_type', 'vehicle_number', 'license_number', 'rating', 'total_deliveries', 'is_active', 'is_verified']
+        fields=['id', 'user', 'name', 'phone', 'email', 'profile_image', 'vehicle_type', 'vehicle_number', 'license_number', 'rating', 'total_deliveries', 'is_active', 'is_verified']

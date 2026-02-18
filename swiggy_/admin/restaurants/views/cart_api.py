@@ -98,6 +98,69 @@ class CartViewSet(viewsets.ModelViewSet):
         except FoodItem.DoesNotExist:
             return Response({"error": "Food item not found"}, status=status.HTTP_404_NOT_FOUND)
 
+    @action(detail=False, methods=['post'])
+    def toggle(self, request):
+        """
+        Toggles an item in the cart:
+        - If item exists, remove it.
+        - If item does not exist, add it (qty 1).
+        """
+        target_user = self._get_cart_user(request)
+        if not target_user:
+            return Response({"error": "Valid User/User ID required for cart access. Admins must provide 'user' or 'user_id'."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        food_item_id = request.data.get('item_id')
+        if not food_item_id:
+            return Response({"error": "item_id parameter is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            food_item = FoodItem.objects.get(id=food_item_id)
+            
+            cart, created = Cart.objects.get_or_create(user=target_user)
+            
+            # Check if item exists in cart
+            cart_item = CartItem.objects.filter(cart=cart, food_item=food_item).first()
+            
+            if cart_item:
+                # CASE: Remove item
+                cart_item.delete()
+                
+                # If cart is now empty, clear the restaurant association
+                if not CartItem.objects.filter(cart=cart).exists():
+                    cart.restaurant = None
+                    cart.save()
+                    
+                return Response({
+                    "message": "Removed from cart", 
+                    "added": False,
+                    "cart_data": CartSerializer(cart).data
+                }, status=status.HTTP_200_OK)
+            else:
+                # CASE: Add item
+                restaurant = food_item.restaurant
+                
+                # Check restaurant conflict
+                if cart.restaurant and cart.restaurant != restaurant:
+                    if CartItem.objects.filter(cart=cart).exists():
+                        return Response({
+                            "error": "Different restaurant detected",
+                            "message": f"Your cart contains items from {cart.restaurant.name}. Do you want to clear it and add this item?"
+                        }, status=status.HTTP_409_CONFLICT)
+                
+                cart.restaurant = restaurant
+                cart.save()
+                
+                CartItem.objects.create(cart=cart, food_item=food_item, quantity=1)
+                
+                return Response({
+                    "message": "Added to cart", 
+                    "added": True, 
+                    "cart_data": CartSerializer(cart).data
+                }, status=status.HTTP_200_OK)
+                
+        except FoodItem.DoesNotExist:
+            return Response({"error": "Food item not found"}, status=status.HTTP_404_NOT_FOUND)
+
     @action(detail=False, methods=['get'])
     def price_summary(self, request):
         target_user = self._get_cart_user(request)

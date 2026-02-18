@@ -1,4 +1,5 @@
 from rest_framework import status, permissions
+from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from admin.restaurants.models.restaurant import Restaurant
@@ -19,10 +20,11 @@ def list_restaurants_api(request):
     min_rating = request.query_params.get('min_rating')
     if min_rating:
         restaurants = restaurants.filter(rating__gte=min_rating)
-    
     # Pass lat/lng to serializer context for distance calculation
-    serializer = RestaurantListSerializer(restaurants, many=True, context={'lat': lat, 'lng': lng, 'request': request})
-    return Response(serializer.data)
+    paginator = LimitOffsetPagination()
+    result_page = paginator.paginate_queryset(restaurants, request)
+    serializer = RestaurantListSerializer(result_page, many=True, context={'lat': lat, 'lng': lng, 'request': request})
+    return paginator.get_paginated_response(serializer.data)
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])

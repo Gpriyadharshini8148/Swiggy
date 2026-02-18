@@ -65,15 +65,6 @@ class OrdersViewSet(viewsets.ModelViewSet):
             # OR prevent them from ordering if they don't have a custom User profile.
             # Assuming for now we need the custom User model for the Cart foreign key.
             try:
-                # If your system links Django User to Custom User, fetch it here.
-                # If not, and they are distinct, we might be in trouble if Cart expects Custom User.
-                # Let's assume we can find a user by some shared field or id if they are synced, 
-                # BUT based on previous errors, 'user' in Cart is likely the custom Users model.
-                
-                # If the request.user IS a Django User (e.g. superuser header login), 
-                # but the Cart model expects a CUSTOM Users instance.
-                # We need to find the Custom User instance that matches the logged in Django user 
-                # (if one exists, e.g. by email or strictly by ID coincidence if that's how it's set up).
                 
                 # Sidenote: The error 'Cannot query "gpriyadharshini9965": Must be "Users" instance'
                 # confirms Cart.user expects admin.access.models.Users, but we passed request.user (Django User).
@@ -139,7 +130,7 @@ class OrdersViewSet(viewsets.ModelViewSet):
                         order=order,
                         food_item=cart_item.food_item,
                         food_name=cart_item.food_item.name,
-                        food_image_url=cart_item.food_item.food_image_url,
+                        food_image=cart_item.food_item.food_image,
                         quantity=cart_item.quantity, 
                         price=cart_item.food_item.price
                     )

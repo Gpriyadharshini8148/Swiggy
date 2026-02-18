@@ -28,20 +28,26 @@ def initiate_payment_api(request):
             "receipt": f"receipt_{order.id}"
         })
         
-        # Create Payment record
-        Payment.objects.create(
+        # Create or Get Payment record
+        payment, created = Payment.objects.get_or_create(
             order=order,
-            razorpay_order_id=razorpay_order['id'],
-            amount=order.total_amount,
-            payment_status='PENDING',
-            payment_method='RAZORPAY'
+            defaults={
+                'razorpay_order_id': razorpay_order['id'],
+                'amount': order.total_amount,
+                'payment_status': 'PENDING',
+                'payment_method': 'RAZORPAY'
+            }
         )
+        if not created:
+            payment.razorpay_order_id = razorpay_order['id']
+            payment.save()
         
         return Response({
             "razorpay_order_id": razorpay_order['id'],
             "amount": order.total_amount,
             "currency": "INR",
-            "key": settings.RAZORPAY_KEY_ID
+            "key": settings.RAZORPAY_KEY_ID,
+            "payment_link": f"https://api.razorpay.com/v1/payment_links/{razorpay_order['id']}" # Mock link
         })
     except Orders.DoesNotExist:
         return Response({"error": "Order not found"}, status=status.HTTP_404_NOT_FOUND)

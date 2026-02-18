@@ -14,7 +14,7 @@ from admin.restaurants.models.review import Review
 from admin.restaurants.models.coupon import Coupon
 from math import radians, cos, sin, asin, sqrt
 from django.contrib.gis.geos import Point
-
+from admin.access.models.wishlist import Wishlist
 class UserSignupSerializer(serializers.ModelSerializer):
     class Meta:
         model = Users
@@ -70,7 +70,7 @@ class ServiceableZoneSerializer(serializers.ModelSerializer):
 class SubCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = SubCategory
-        fields = ['id', 'name', 'image_url']
+        fields = ['id', 'name', 'image']
 
 class RestaurantListSerializer(serializers.ModelSerializer):
     time_taken_for_delivery = serializers.SerializerMethodField()
@@ -81,7 +81,7 @@ class RestaurantListSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Restaurant
-        fields = ['id', 'name', 'logo_image_url', 'banner_image_url', 'rating', 'restaurant_location', 'time_taken_for_delivery', 'offers', 'veg_or_non_veg', 'outlets']
+        fields = ['id', 'name', 'logo_image', 'banner_image', 'rating', 'restaurant_location', 'time_taken_for_delivery', 'offers', 'veg_or_non_veg', 'outlets']
     
     def get_time_taken_for_delivery(self, obj):
         user_lat = self.context.get('lat')
@@ -102,23 +102,55 @@ class RestaurantListSerializer(serializers.ModelSerializer):
                     user_lng = default_address.location.x
 
         if not user_lat or not user_lng or not obj.location:
-            return "N/A"
+             # Fallback if no location data: Return estimate based on city average? Or just N/A
+            return "30-40 mins" # Default fallback for now if location fails
         
         try:
-            # Simple Haversine approximation
-            lon1, lat1, lon2, lat2 = map(radians, [float(user_lng), float(user_lat), obj.location.x, obj.location.y])
+            # Step A: Calculate Distance (Haversine Formula)
+            # Ensure coordinates are floats
+            u_lat = float(user_lat)
+            u_lng = float(user_lng)
+            
+            # Check if restaurant location is valid point
+            if not obj.location or not hasattr(obj.location, 'x') or not hasattr(obj.location, 'y'):
+                 return "30-40 mins"
+
+            r_lat = obj.location.y
+            r_lng = obj.location.x
+
+            lon1, lat1, lon2, lat2 = map(radians, [u_lng, u_lat, r_lng, r_lat])
             dlon = lon2 - lon1 
             dlat = lat2 - lat1 
             a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
             c = 2 * asin(sqrt(a)) 
             r = 6371 # Radius of earth in kilometers
-            distance = c * r
+            distance_km = c * r
             
-            # Avg speed 20km/h => 3 min/km. Prep time 15 min.
-            time_mins = int((distance * 3) + 15)
-            return f"{time_mins} mins"
-        except Exception:
-            return "N/A"
+            # 1. Restaurant Preparation Time
+            prep_time = 20 # minutes (average)
+            
+            # 2. Rider Assignment Time
+            assignment_buffer = 5 # minutes
+            
+            # 3. Travel Time Calculation
+            # Average speed in city: 25 km/hr
+            avg_speed_kmph = 25
+            travel_time_mins = (distance_km / avg_speed_kmph) * 60
+            
+            # 4. Buffer Time (Traffic, rain, parking, etc)
+            buffer_time = 5 # minutes
+            
+            # Final ETA
+            total_time_mins = int(prep_time + assignment_buffer + travel_time_mins + buffer_time)
+            
+            # Show a range
+            lower_bound = total_time_mins - 2
+            upper_bound = total_time_mins + 3
+            
+            return f"{lower_bound}-{upper_bound} mins"
+        except Exception as e:
+            print(f"DEBUG ETA ERROR: {e}")
+            return "35-45 mins" # Falback on error
 
     def get_restaurant_location(self, obj):
         return f"{obj.address}, {obj.city.name if obj.city else ''}"
@@ -148,18 +180,46 @@ class RestaurantListSerializer(serializers.ModelSerializer):
 
 class FoodItemSerializer(serializers.ModelSerializer):
     cart = serializers.SerializerMethodField()
+    cart_added = serializers.SerializerMethodField()
+    wishlist_added = serializers.SerializerMethodField()
     ratings = serializers.DecimalField(source='rating', max_digits=3, decimal_places=1, read_only=True)
     category_name = serializers.CharField(source='category.name', read_only=True)
-    banner_image_url = serializers.CharField(source='restaurant.banner_image_url', read_only=True)
-    logo_image_url = serializers.CharField(source='restaurant.logo_image_url', read_only=True)
+    sub_category_name = serializers.CharField(source='sub_category.name', read_only=True)
+    banner_image = serializers.ImageField(source='restaurant.banner_image', read_only=True)
+    logo_image = serializers.ImageField(source='restaurant.logo_image', read_only=True)
 
     class Meta:
         model = FoodItem
-        fields = ['id', 'restaurant', 'category', 'category_name', 'sub_category', 'name', 'food_image_url', 'description', 'ratings', 'customization', 'price', 'discount_type', 'discount_value', 'discounted_price', 'is_available', 'is_veg', 'is_both', 'cart', 'banner_image_url', 'logo_image_url']
+        fields = ['id', 'restaurant', 'category', 'category_name', 'sub_category', 'sub_category_name', 'name', 'food_image', 'description', 'ratings', 'customization', 'price', 'discount_type', 'discount_value', 'discounted_price', 'is_available', 'is_veg', 'is_both', 'cart', 'cart_added', 'wishlist_added', 'banner_image', 'logo_image']
 
+
+    def get_cart_added(self, obj):
+        user = self.context.get('request').user if self.context.get('request') else None
+        if user and user.is_authenticated:
+            try:
+                # Optimized to just check existence
+                # We need to filter by user. 
+                # Assuming standard Cart model structure where one user has one cart
+                cart = Cart.objects.filter(user=user).first()
+                if cart:
+                    return CartItem.objects.filter(cart=cart, food_item=obj).exists()
+            except Exception:
+                pass
+        return False
+
+    def get_wishlist_added(self, obj):
+        from admin.access.models.wishlist import Wishlist
+        user = self.context.get('request').user if self.context.get('request') else None
+        if user and user.is_authenticated:
+            try:
+                # Check for active wishlist item (not soft deleted)
+                return Wishlist.objects.filter(user=user, food_item=obj, deleted_at__isnull=True).exists()
+            except Exception:
+                pass
+        return False
 
     def get_cart(self, obj):
-        # Alias for cart quantity
+        # Returns current quantity in cart
         user = self.context.get('request').user if self.context.get('request') else None
         if user and user.is_authenticated:
             try:
@@ -170,24 +230,30 @@ class FoodItemSerializer(serializers.ModelSerializer):
             except Exception:
                 pass
         return 0
+class WishlistSerializer(serializers.ModelSerializer):
+    food_item_details = FoodItemSerializer(source='food_item', read_only=True)
+    class Meta:
+        model = Wishlist
+        fields = ['id', 'user', 'food_item', 'food_item_details', 'created_at']
+        read_only_fields = ['user', 'created_at']
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
-        fields = ['id', 'name', 'image_url']
+        fields = ['id', 'name', 'image']
 
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderItem
-        fields = ['id', 'food_item', 'food_name', 'food_image_url', 'quantity', 'price']
+        fields = ['id', 'food_item', 'food_name', 'food_image', 'quantity', 'price']
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True, source='orderitem_set')
     class Meta:
         model = Orders
-        fields = ['id', 'user', 'restaurant', 'items', 'address', 'subtotal', 'discount_amount', 'delivery_fee', 'total_amount', 'order_status', 'payment_status', 'customer_instructions', 'created_at']
+        fields = ['id', 'user', 'restaurant', 'items', 'address', 'subtotal', 'discount_amount', 'delivery_fee', 'total_amount', 'order_status', 'payment_status', 'customer_instructions', 'cutlery_needed', 'delivery_type', 'coupon_code', 'created_at']
 
 class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -208,7 +274,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Users
-        fields = ['username', 'phone', 'email', 'profile_image_url', 'addresses', 'payment_methods', 'refunds', 'past_orders']
+        fields = ['username', 'phone', 'email', 'profile_image', 'addresses', 'payment_methods', 'refunds', 'past_orders']
 
     def get_past_orders(self, obj):
         orders = Orders.objects.filter(user=obj).order_by('-created_at')
@@ -222,3 +288,11 @@ class UserProfileSerializer(serializers.ModelSerializer):
          from admin.delivery.models.payment import Payment
          methods = Payment.objects.filter(order__user=obj).values_list('payment_method', flat=True).distinct()
          return list(methods)
+
+class PlaceOrderInputSerializer(serializers.Serializer):
+    address_id = serializers.IntegerField(required=True)
+    cutlery_needed = serializers.BooleanField(required=False, default=False)
+    customer_instructions = serializers.CharField(required=False, allow_blank=True)
+    coupon_id = serializers.IntegerField(required=False, allow_null=True)
+    delivery_type = serializers.ChoiceField(choices=['Standard', 'Express', 'Eco Saver'], default='Standard')
+    payment_method = serializers.ChoiceField(choices=['Pay On Delivery', 'UPI', 'Card', 'Wallet'], default='Pay On Delivery')

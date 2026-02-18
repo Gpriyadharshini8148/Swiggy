@@ -1,10 +1,11 @@
 from django.contrib.gis.db import models
+from django.utils import timezone
 from admin.access.models import BaseModel, City, State, Users
 
 class Restaurant(BaseModel):
     name = models.CharField(max_length=255)
-    logo_image_url = models.URLField(null=True, blank=True,max_length=500)
-    banner_image_url = models.URLField(null=True, blank=True,max_length=500)
+    logo_image = models.ImageField(upload_to='restaurants/logos/', null=True, blank=True)
+    banner_image = models.ImageField(upload_to='restaurants/banners/', null=True, blank=True)
     location = models.PointField(srid=4326, blank=True, null=True, help_text="Latitude and Longitude")
     address = models.TextField(null=True, blank=True)
     state = models.ForeignKey(State, on_delete=models.CASCADE, null=True, blank=True)
@@ -27,3 +28,16 @@ class Restaurant(BaseModel):
     deleted_at = models.DateTimeField(null=True, blank=True)
     def __str__(self):
         return self.name
+
+    @property
+    def is_open(self):
+        if not self.is_active:
+             return False
+        
+        now = timezone.localtime().time()
+        if self.opening_time and self.closing_time:
+            if self.opening_time < self.closing_time:
+                return self.opening_time <= now <= self.closing_time
+            else: # Overnight, e.g. 10 PM to 2 AM
+                return now >= self.opening_time or now <= self.closing_time
+        return True # Default to open if no times set

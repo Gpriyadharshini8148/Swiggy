@@ -8,3 +8,5 @@ from .notification_api import *
 from .review_api import *
 from .food_items_api import *
 from .profile_api import *
+from .cart_api import *
+from .wishlist_api import UserWishlistViewSet

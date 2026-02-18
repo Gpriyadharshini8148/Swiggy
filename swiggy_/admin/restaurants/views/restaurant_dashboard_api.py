@@ -1,4 +1,5 @@
 from rest_framework import viewsets, status, permissions
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.utils import timezone
@@ -9,7 +10,8 @@ from admin.restaurants.serializers import RestaurantSerializer, RestaurantOrderS
 from admin.access.models import Users     
 from admin.restaurants.models.review import Review
 from admin.restaurants.serializers import ReviewSerializer
-from django.db.models import Sum      
+from django.db.models import Sum 
+import random     
 
 class IsRestaurantOwner(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -33,7 +35,6 @@ class RestaurantDashboardViewSet(viewsets.ViewSet):
                 except Restaurant.DoesNotExist:
                     pass
             return None
-
         # Handle Restaurant User (Custom Users model)
         try:
             # Verify if request.user is an instance of the custom Users model
@@ -80,11 +81,15 @@ class RestaurantDashboardViewSet(viewsets.ViewSet):
         if status_filter:
             orders = orders.filter(order_status=status_filter.upper())
             
-        serializer = RestaurantOrderSerializer(orders, many=True)
-        return Response(serializer.data)
+        paginator = PageNumberPagination()
+        paginator.page_size = 10
+        paginator.page_size_query_param = 'page_size'
+        result_page = paginator.paginate_queryset(orders, request)
+        serializer = RestaurantOrderSerializer(result_page, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
     @action(detail=True, methods=['post'])
-    def update_order_status(self, request, pk=None):
+    def update_order_status_detail(self, request, pk=None):
         restaurant = self.get_restaurant(request)
         if not restaurant:
             return Response({"error": "Restaurant profile not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -118,8 +123,7 @@ class RestaurantDashboardViewSet(viewsets.ViewSet):
             order.preparation_timestamp = timezone.now()
         elif new_status == 'READY':
             order.ready_timestamp = timezone.now()
-            # Generate 4-digit OTP
-            import random
+            # Generate 6-digit OTP
             order.handover_otp = f"{random.randint(100000, 999999)}" 
             # In a real app, you would send this OTP to the delivery partner via notification/SMS here.
         elif new_status == 'PICKED_UP':
@@ -151,7 +155,6 @@ class RestaurantDashboardViewSet(viewsets.ViewSet):
         )
         
         # Manually count status-specific queries or use conditional aggregation if Django version supports (ref django.db.models.functions)
-        # For simplicity and standard Django support:
         completed_orders = today_orders.filter(order_status='DELIVERED').count()
         pending_orders = today_orders.filter(order_status='PENDING').count()
         
@@ -177,7 +180,7 @@ class RestaurantDashboardViewSet(viewsets.ViewSet):
         today_orders = Orders.objects.filter(restaurant=restaurant, created_at__date=today, order_status='DELIVERED')
         daily_revenue = today_orders.aggregate(total=Sum('total_amount'))['total'] or 0
         
-        # Simple Logic: 
+        # Simple Logic
         # Platform Commission: 20%
         # GST: 18% (on commission or total? usually on food bill, but let's say 5% GST on food + commission)
         # Let's approximate for the dashboard view

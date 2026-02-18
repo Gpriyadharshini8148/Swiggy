@@ -113,9 +113,9 @@ class AuthViewSet(viewsets.GenericViewSet):
                 if not user.is_verified:
                     return Response({"error": "Account not verified. Please verify your OTP to approve your account."}, status=status.HTTP_403_FORBIDDEN)
 
-                # Allow re-login to overwrite previous session
-                # if user.is_logged_in:
-                #      return Response({"error": "User already logged in"}, status=status.HTTP_400_BAD_REQUEST)
+                # Prevent re-login if already logged in
+                if user.is_logged_in:
+                     return Response({"error": "User already logged in"}, status=status.HTTP_400_BAD_REQUEST)
                 
                 user.is_logged_in = True
                 user.save()
@@ -254,12 +254,14 @@ class AuthViewSet(viewsets.GenericViewSet):
         password = serializer.validated_data['password']
         role = serializer.validated_data['role']
         admin_type = serializer.validated_data.get('admin_type', 'NONE')
-
         # Role-based creation restrictions
-        if creator.role == 'SUPERADMIN':
+        # Safely access role, default to '' if not present 
+        creator_role = getattr(creator, 'role', '')
+        
+        if creator_role == 'SUPER_ADMIN':
             # Super Admin has no restrictions
             pass
-        elif creator.role == 'ADMIN':
+        elif creator_role == 'ADMIN':
             if creator.admin_type == 'RESTAURANT_ADMIN':
                 # Admins can only create users within their own admin_type
                 if admin_type != 'NONE' and admin_type != creator.admin_type:
@@ -294,9 +296,7 @@ class AuthViewSet(viewsets.GenericViewSet):
             'email': email,
             'phone': phone,
             'name': email.split('@')[0] if email else f"User{phone}",
-            'role': role,
-            'admin_type': admin_type,
-            'password_hash': make_password(password),
+            'role': role,            'password_hash': make_password(password),
             'created_by': creator.username
         }
         # Sign and dump the data into a token
@@ -316,7 +316,8 @@ class AuthViewSet(viewsets.GenericViewSet):
                     password=password, 
                     approve_link=approve_link, 
                     reject_link=reject_link,
-                    phone=phone
+                    phone=phone,
+                    role=role
                 )
             except Exception as e:
                  print(f"Failed to send email: {e}")
@@ -373,7 +374,8 @@ class AuthViewSet(viewsets.GenericViewSet):
             'phone': phone,
             'name': email.split('@')[0] if email else f"User{phone}",
             'role': 'USER',
-            'admin_type': 'NONE',
+            'role': 'USER',
+            # 'admin_type': 'NONE' removed
             'password_hash': make_password(password),
             'created_by': creator.username
         }
@@ -388,7 +390,7 @@ class AuthViewSet(viewsets.GenericViewSet):
                     sender=self.__class__, 
                     email=email, password=password, 
                     approve_link=approve_link, reject_link=reject_link,
-                    phone=phone
+                    phone=phone, role='USER'
                 )
             except Exception as e:
                  print(f"Failed to send email: {e}")

@@ -24,34 +24,39 @@ def push_notification_api(request):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def list_notifications_api(request):
-    if getattr(request.user, 'role', None) == 'SUPERADMIN':
+    notifications = Notification.objects.none()
+    
+    # Safely check for is_superuser
+    is_superuser = getattr(request.user, 'is_superuser', False)
+    
+    if getattr(request.user, 'role', None) == 'SUPER_ADMIN' or is_superuser:
         notifications = Notification.objects.all().order_by('-created_at')
     elif isinstance(request.user, Users):
         notifications = Notification.objects.filter(user=request.user).order_by('-created_at')
     else:
-        return Response({"error": "Invalid user context"}, status=status.HTTP_400_BAD_REQUEST)
+        # Fallback for unexpected user types
+        notifications = Notification.objects.none()
         
     serializer = NotificationSerializer(notifications, many=True)
     return Response(serializer.data)
 
-@api_view(['POST'])
+@api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
-def mark_notification_read_api(request, notification_id):
+def get_notification_detail_api(request, pk):
     try:
-        from admin.access.models import Users
-    except ImportError:
-        pass
-
-    try:
-        if getattr(request.user, 'role', None) == 'SUPERADMIN':
-             notification = Notification.objects.get(id=notification_id)
+        if getattr(request.user, 'role', None) == 'SUPER_ADMIN' or getattr(request.user, 'is_superuser', False):
+             notification = Notification.objects.get(id=pk)
         elif isinstance(request.user, Users):
-             notification = Notification.objects.get(id=notification_id, user=request.user)
+             notification = Notification.objects.get(id=pk, user=request.user)
         else:
              return Response({"error": "Invalid user context"}, status=status.HTTP_400_BAD_REQUEST)
 
-        notification.is_read = True
-        notification.save()
-        return Response({"message": "Marked as read"})
+        # Mark as read specific notification
+        if not notification.is_read:
+            notification.is_read = True
+            notification.save()
+
+        serializer = NotificationSerializer(notification)
+        return Response(serializer.data)
     except Notification.DoesNotExist:
         return Response({"error": "Notification not found"}, status=status.HTTP_404_NOT_FOUND)

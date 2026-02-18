@@ -9,6 +9,7 @@ class Orders(BaseModel):
     discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     delivery_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    delivery_partner = models.ForeignKey('delivery.DeliveryPartner', on_delete=models.SET_NULL, null=True, blank=True)
     ORDER_STATUS_CHOICES = (
         ('PENDING', 'Pending'),
         ('ACCEPTED', 'Accepted'),
@@ -27,6 +28,10 @@ class Orders(BaseModel):
     
     # Customer Details
     customer_instructions = models.TextField(null=True, blank=True)
+    cutlery_needed = models.BooleanField(default=False)
+    delivery_type = models.CharField(max_length=50, default='Standard')
+    coupon_code = models.CharField(max_length=50, null=True, blank=True)
+    
     preparation_timestamp = models.DateTimeField(null=True, blank=True)
     ready_timestamp = models.DateTimeField(null=True, blank=True)
     pickup_timestamp = models.DateTimeField(null=True, blank=True)

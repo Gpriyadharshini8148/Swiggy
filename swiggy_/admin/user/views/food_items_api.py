@@ -14,7 +14,7 @@ def food_items_api(request):
     max_price = request.query_params.get('max_price')
     restaurant_id = request.query_params.get('restaurant_id')
     
-    items = FoodItem.objects.filter(is_available=True)
+    items = FoodItem.objects.filter(is_available=True, restaurant__is_active=True)
     
     if query:
         items = items.filter(name__icontains=query) | items.filter(description__icontains=query)
@@ -22,6 +22,10 @@ def food_items_api(request):
         
     if category_name:
         items = items.filter(category__name__icontains=category_name)
+    
+    sub_category_name = request.query_params.get('sub_category')
+    if sub_category_name:
+        items = items.filter(sub_category__name__icontains=sub_category_name)
         
     if veg_only and veg_only.lower() == 'true':
         items = items.filter(is_veg=True)

@@ -12,9 +12,18 @@ class RestaurantViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'category']
 
     @action(detail=True, methods=['get'])
-    def menu(self, request, pk=None):
+    def menu_detail(self, request, pk=None):
         restaurant = self.get_object()
-        food_items = FoodItem.objects.filter(restaurant=restaurant)
+        
+        # Check if restaurant is open
+        if not restaurant.is_open:
+             # Check if it's inactive (admin block) or just closed (out of hours)
+             reason = "Restaurant is closed (After Hours)"
+             if not restaurant.is_active:
+                  reason = "Restaurant is currently inactive"
+             return Response({"error": reason, "is_active": False, "menu": []}, status=status.HTTP_200_OK)
+
+        food_items = FoodItem.objects.filter(restaurant=restaurant, is_available=True)
         serializer = FoodItemSerializer(food_items, many=True)
         return Response(serializer.data)
     @action(detail=False, methods=['get'])

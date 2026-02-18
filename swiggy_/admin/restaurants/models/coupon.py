@@ -5,7 +5,7 @@ from .restaurant import Restaurant
 class Coupon(BaseModel):
     code = models.CharField(max_length=50, unique=True)
     description = models.TextField()
-    coupon_image_url = models.URLField(null=True, blank=True,max_length=500)
+    coupon_image = models.ImageField(upload_to='restaurants/coupons/', null=True, blank=True)
     DISCOUNT_CHOICES = (
         ('Percentage', 'Percentage'),
         ('Flat', 'Flat'),
