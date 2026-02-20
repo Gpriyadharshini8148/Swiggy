@@ -1,5 +1,5 @@
 from django.db import models
-from admin.access.models import BaseModel
+from admin.access.models import BaseModel, Images
 from .restaurant import Restaurant
 from .category import Category, SubCategory
 
@@ -8,7 +8,7 @@ class FoodItem(BaseModel):
     category = models.ForeignKey(Category, on_delete=models.CASCADE)
     sub_category = models.ForeignKey(SubCategory, on_delete=models.SET_NULL, null=True, blank=True)
     name = models.CharField(max_length=255)
-    food_image = models.ImageField(upload_to='restaurants/food_items/', null=True, blank=True)
+    food_image = models.ForeignKey(Images, on_delete=models.SET_NULL, null=True, blank=True)
     customization = models.JSONField(null=True, blank=True)
     price = models.DecimalField(max_digits=10, decimal_places=2)
     DISCOUNT_CHOICES = (

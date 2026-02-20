@@ -39,7 +39,7 @@ class Users(BaseModel):
     otp = models.CharField(max_length=10, null=True, blank=True)
     is_verified = models.BooleanField(default=False)
     is_logged_in = models.BooleanField(default=False)
-    profile_image = models.ImageField(upload_to='users/profiles/', null=True, blank=True)
+    profile_image = models.ForeignKey('Images', on_delete=models.SET_NULL, null=True, blank=True)
     last_login = models.DateTimeField(null=True, blank=True)
 
     def save(self, *args, **kwargs):

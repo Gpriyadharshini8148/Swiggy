@@ -40,21 +40,6 @@ class UsersViewSet(viewsets.ModelViewSet):
             if target_role not in ['ADMIN', 'USER', 'RESTAURANT', 'DELIVERY']:
                  # Allow creating other roles too since I merged them
                  pass
-            # Re-evaluating: Original code was strict: ['ADMIN', 'USER'].
-            # But now we merged RESTAURANT/DELIVERY into role.
-            # If Admin cannot create Restaurant/Delivery, who can? Superadmin?
-            # I should prob allow Admin to create Restaurant/Delivery.
-            # But avoiding logic change is safer unless sure.
-            # However, previously Restaurant/Delivery were in admin_type.
-            # So creating a user with role=USER/ADMIN and admin_type=... was how it worked?
-            # Let's check original Users model. admin_type choices were RES/DEL.
-            # So old code: role was ADMIN/USER. If role=USER, admin_type could be set?
-            # Actually admin_type choices were for ADMIN_TYPE? NO, role choices were SUPERADMIN, ADMIN, USER.
-            # admin_type choices: RESTAURANT, DELIVERY, MANAGER.
-            
-            # If I merged them into role, then `target_role` can now be RESTAURANT.
-            # OLD: create User (role=USER).
-            # NEW: create User (role=RESTAURANT).
             
             # If I don't update this check, Admin cannot create Restaurant.
             # I will assume Admin SHOULD be able to create Restaurant/Delivery.

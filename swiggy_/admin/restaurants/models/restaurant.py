@@ -1,11 +1,11 @@
 from django.contrib.gis.db import models
 from django.utils import timezone
-from admin.access.models import BaseModel, City, State, Users
+from admin.access.models import BaseModel, City, State, Users, Images
 
 class Restaurant(BaseModel):
     name = models.CharField(max_length=255)
-    logo_image = models.ImageField(upload_to='restaurants/logos/', null=True, blank=True)
-    banner_image = models.ImageField(upload_to='restaurants/banners/', null=True, blank=True)
+    logo_image = models.ForeignKey(Images, related_name='restaurant_logo', on_delete=models.SET_NULL, null=True, blank=True)
+    banner_image = models.ForeignKey(Images, related_name='restaurant_banner', on_delete=models.SET_NULL, null=True, blank=True)
     location = models.PointField(srid=4326, blank=True, null=True, help_text="Latitude and Longitude")
     address = models.TextField(null=True, blank=True)
     state = models.ForeignKey(State, on_delete=models.CASCADE, null=True, blank=True)

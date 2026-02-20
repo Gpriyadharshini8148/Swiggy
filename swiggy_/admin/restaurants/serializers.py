@@ -60,7 +60,7 @@ class RestaurantOrderSerializer(serializers.ModelSerializer):
         
     def get_delivery_address(self, obj):
         if obj.address:
-            return f"{obj.address.street_address}, {obj.address.city.name}, {obj.address.state.name} - {obj.address.pincode}"
+            return f"{obj.address.address_line_1}, {obj.address.city.name}, {obj.address.state.name} - {obj.address.pincode}"
         return None
 class ReviewSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)

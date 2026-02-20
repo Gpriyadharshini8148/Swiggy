@@ -20,7 +20,7 @@ class IsRestaurantOwner(permissions.BasePermission):
         if getattr(request.user, 'is_superuser', False):
             return True
             
-        return request.user and request.user.is_authenticated and (getattr(request.user, 'role', None) in ['RESTAURANT', 'SUPERADMIN'])
+        return request.user and request.user.is_authenticated and (getattr(request.user, 'role', None) in ['RESTAURANT', 'RESTAURANT_ADMIN', 'SUPERADMIN'])
 
 class RestaurantDashboardViewSet(viewsets.ViewSet):
     permission_classes = [IsRestaurantOwner]
@@ -69,14 +69,22 @@ class RestaurantDashboardViewSet(viewsets.ViewSet):
                 return Response(serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
     @action(detail=False, methods=['get'])
     def orders(self, request):
         restaurant = self.get_restaurant(request)
+        
+        # If Super Admin and no restaurant_id provided, show ALL orders or filter by param
         if not restaurant:
-            return Response({"error": "Restaurant profile not found"}, status=status.HTTP_404_NOT_FOUND)
-            
+             if getattr(request.user, 'is_superuser', False) or getattr(request.user, 'role', None) == 'SUPERADMIN':
+                 # List all orders for Super Admin if no specific restaurant selected
+                 orders = Orders.objects.select_related('user', 'address', 'address__city', 'address__state').order_by('-created_at')
+             else:
+                 return Response({"error": "Restaurant profile not found"}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            orders = Orders.objects.filter(restaurant=restaurant).select_related('user', 'address', 'address__city', 'address__state').order_by('-created_at')
+        
         status_filter = request.query_params.get('status')
-        orders = Orders.objects.filter(restaurant=restaurant).select_related('user', 'address', 'address__city', 'address__state').order_by('-created_at')
         
         if status_filter:
             orders = orders.filter(order_status=status_filter.upper())

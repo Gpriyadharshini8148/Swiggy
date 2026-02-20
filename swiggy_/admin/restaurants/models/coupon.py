@@ -1,11 +1,11 @@
 from django.db import models
-from admin.access.models import BaseModel
+from admin.access.models import BaseModel, Images
 from .restaurant import Restaurant
 
 class Coupon(BaseModel):
     code = models.CharField(max_length=50, unique=True)
     description = models.TextField()
-    coupon_image = models.ImageField(upload_to='restaurants/coupons/', null=True, blank=True)
+    coupon_image = models.ForeignKey(Images, on_delete=models.SET_NULL, null=True, blank=True)
     DISCOUNT_CHOICES = (
         ('Percentage', 'Percentage'),
         ('Flat', 'Flat'),

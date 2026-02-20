@@ -11,6 +11,10 @@ from django.db import transaction
 from django.conf import settings
 import razorpay
 from admin.delivery.models import Delivery
+from rest_framework.parsers import MultiPartParser
+from django.http import HttpResponse
+from tablib import Dataset
+from admin.delivery.admin import OrdersResource
 client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
 
 class OrdersViewSet(viewsets.ModelViewSet):
@@ -193,3 +197,80 @@ class OrdersViewSet(viewsets.ModelViewSet):
             'order_status': order.order_status,
             'delivery_partner_name': delivery_partner_name
         })
+
+    @action(detail=False, methods=['get'])
+    def export_csv(self, request):
+        user = request.user
+        role = getattr(user, 'role', None)
+
+        if getattr(user, 'is_superuser', False) or role == 'SUPERADMIN':
+            queryset = Orders.objects.all()
+        elif role in ['RESTAURANT', 'RESTAURANT_ADMIN']:
+            queryset = Orders.objects.filter(restaurant__user=user)
+        elif role == 'DELIVERY_ADMIN':
+            queryset = Orders.objects.filter(delivery__isnull=False)
+        else:
+            return Response({"error": "Permission denied."}, status=403)
+
+        resource = OrdersResource()
+        dataset = resource.export(queryset)
+        
+        export_format = request.query_params.get('format', 'csv')
+        if export_format == 'xlsx':
+            response = HttpResponse(dataset.xlsx, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            response['Content-Disposition'] = 'attachment; filename="orders.xlsx"'
+        elif export_format == 'xls':
+            response = HttpResponse(dataset.xls, content_type='application/vnd.ms-excel')
+            response['Content-Disposition'] = 'attachment; filename="orders.xls"'
+        else:
+            response = HttpResponse(dataset.csv, content_type='text/csv')
+            response['Content-Disposition'] = 'attachment; filename="orders.csv"'
+        return response
+
+    @action(detail=False, methods=['post'], parser_classes=[MultiPartParser])
+    def import_csv(self, request):
+        user = request.user
+        role = getattr(user, 'role', None)
+        
+        if not (getattr(user, 'is_superuser', False) or role in ['SUPERADMIN', 'RESTAURANT', 'RESTAURANT_ADMIN', 'DELIVERY_ADMIN']):
+            return Response({"error": "Permission denied."}, status=403)
+
+        file = request.FILES.get('file')
+        if not file:
+            return Response({"error": "No file uploaded"}, status=400)
+
+        dataset = Dataset()
+        try:
+            file_extension = file.name.split('.')[-1].lower() if '.' in file.name else 'csv'
+            if file_extension in ['xlsx', 'xls']:
+                dataset.load(file.read(), format=file_extension)
+            else:
+                dataset.load(file.read().decode('utf-8'), format='csv')
+        except Exception as e:
+            return Response({"error": f"Failed to parse file: {str(e)}"}, status=400)
+            
+        # Security overrides
+        is_super = getattr(user, 'is_superuser', False) or role in ['SUPERADMIN', 'DELIVERY_ADMIN']
+        if not is_super and role in ['RESTAURANT', 'RESTAURANT_ADMIN']:
+            # Force all imported orders to belong to this user's restaurant
+            from admin.restaurants.models import Restaurant
+            user_restaurant = Restaurant.objects.filter(user=user).first()
+            if not user_restaurant:
+                return Response({"error": "No restaurant associated with your account."}, status=400)
+            
+            if 'restaurant' in dataset.headers:
+                del dataset['restaurant']
+            dataset.append_col([user_restaurant.id] * len(dataset), header='restaurant')
+        
+        resource = OrdersResource()
+        result = resource.import_data(dataset, dry_run=True)
+        
+        if not result.has_errors():
+            resource.import_data(dataset, dry_run=False)
+            return Response({"message": f"Successfully imported {len(dataset)} orders."})
+        else:
+            errors = []
+            for i, row_errors in enumerate(result.row_errors()):
+                for error in row_errors[1]:
+                    errors.append(f"Row {row_errors[0]}: {str(error.error)}")
+            return Response({"error": "Import failed", "details": errors}, status=400)

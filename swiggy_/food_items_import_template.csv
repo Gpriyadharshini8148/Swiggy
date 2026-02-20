@@ -1,0 +1,5 @@
+restaurant,name,category,sub_category,price,is_veg,description,food_image
+Dominos,Pepperoni Pizza,Italian,Pizza,300,FALSE,Pepperoni topped pizza,
+Dominos,Garlic Bread,Italian,Sides,120,TRUE,Toasted garlic bread,
+Subway,Paneer Tikka Sub,Fast Food,Sandwich,180,TRUE,Grilled paneer sandwich,
+Subway,Chicken Teriyaki Sub,Fast Food,Sandwich,220,FALSE,Chicken with teriyaki sauce,

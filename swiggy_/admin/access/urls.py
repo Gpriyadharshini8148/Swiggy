@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import AuthViewSet, UsersViewSet, AddressViewSet, WishlistViewSet, RewardsViewSet, StateViewSet, CityViewSet
+from .views import AuthViewSet, UsersViewSet, AddressViewSet, WishlistViewSet, RewardsViewSet, StateViewSet, CityViewSet, upload_image_api, list_images_api
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
@@ -42,4 +42,7 @@ urlpatterns = [
     path('create_account_by_super_admin/', AuthViewSet.as_view({'post': 'create_account_by_super_admin'}), name='create-account-by-super-admin'),
     path('restaurant_signup/', AuthViewSet.as_view({'post': 'restaurant_signup'}), name='restaurant-signup'),
     path('logout/', AuthViewSet.as_view({'post': 'logout'}), name='logout'),
+    path('users/', UsersViewSet.as_view({'get': 'list', 'post': 'create'}), name='users-list-create'),
+    path('image/upload/', upload_image_api, name='upload-image'),
+    path('images/', list_images_api, name='list-images'),
 ]

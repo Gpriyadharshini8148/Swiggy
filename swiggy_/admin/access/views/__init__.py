@@ -4,3 +4,4 @@ from .address_api import AddressViewSet
 from .rewards_api import RewardsViewSet
 from .wishlist_api import WishlistViewSet
 from .state_city_view import StateViewSet, CityViewSet
+from .image_api import upload_image_api, list_images_api

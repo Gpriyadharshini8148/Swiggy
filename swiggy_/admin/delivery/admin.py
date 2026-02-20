@@ -1,27 +1,38 @@
 from django.contrib import admin
-from .models import Orders, OrderItem, OrderCoupon, Payment, Delivery, DeliveryPartner
+from import_export import resources
+from import_export.admin import ImportExportModelAdmin
+from .models import DeliveryPartner, Orders, OrderItem
+
+# Resources
+class DeliveryPartnerResource(resources.ModelResource):
+    class Meta:
+        model = DeliveryPartner
+
+class OrdersResource(resources.ModelResource):
+    class Meta:
+        model = Orders
+
+class OrderItemResource(resources.ModelResource):
+    class Meta:
+        model = OrderItem
+
+# Admin Classes
+@admin.register(DeliveryPartner)
+class DeliveryPartnerAdmin(ImportExportModelAdmin):
+    resource_class = DeliveryPartnerResource
+    list_display = ('name', 'phone', 'is_available', 'is_active', 'total_deliveries')
+    search_fields = ('name', 'phone', 'email')
+    list_filter = ('is_available', 'is_active', 'vehicle_type')
 
 @admin.register(Orders)
-class OrdersAdmin(admin.ModelAdmin):
-    list_display = ('id', 'user', 'restaurant', 'total_amount', 'order_status')
-    list_filter = ('order_status', 'restaurant')
+class OrdersAdmin(ImportExportModelAdmin):
+    resource_class = OrdersResource
+    list_display = ('id', 'user', 'restaurant', 'total_amount', 'order_status', 'created_at')
+    search_fields = ('id', 'user__username', 'restaurant__name')
+    list_filter = ('order_status', 'created_at')
+
 @admin.register(OrderItem)
-class OrderItemAdmin(admin.ModelAdmin):
+class OrderItemAdmin(ImportExportModelAdmin):
+    resource_class = OrderItemResource
     list_display = ('order', 'food_name', 'quantity', 'price')
-
-@admin.register(OrderCoupon)
-class OrderCouponAdmin(admin.ModelAdmin):
-    list_display = ('order', 'coupon')
-
-@admin.register(Payment)
-class PaymentAdmin(admin.ModelAdmin):
-    list_display = ('order', 'payment_method', 'payment_status', 'paid_at')
-
-@admin.register(Delivery)
-class DeliveryAdmin(admin.ModelAdmin):
-    list_display = ('order', 'delivery_status', 'delivered_at')
-
-@admin.register(DeliveryPartner)
-class DeliveryPartnerAdmin(admin.ModelAdmin):
-    list_display = ('name', 'phone', 'is_active', 'is_verified', 'email')
-
+    search_fields = ('order__id', 'food_name')

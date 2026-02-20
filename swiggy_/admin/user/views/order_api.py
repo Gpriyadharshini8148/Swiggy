@@ -179,20 +179,17 @@ def place_order_api(request):
             else: # ONLINE
                 # Create Payment Record for tracking
                 from admin.delivery.models.payment import Payment
-                # Mock Razorpay Initiation just to get an ID if needed, or just create record
-                razorpay_order_id_mock = f"order_rzp_{order.id}"
+                from django.urls import reverse
                 
                 Payment.objects.create(
                     order=order,
                     payment_method=payment_method,
                     payment_status='PENDING',
-                    razorpay_order_id=razorpay_order_id_mock,
                     amount=total_amount
                 )
                 
-                # Mock Payment Gateway URL 
-                # (In real world, you might return the razorpay order_id for SDK, but user asked for URL)
-                payment_url = f"https://payment-gateway.com/pay/{razorpay_order_id_mock}"
+                # URL to initiate payment (Frontend should POST to this with order_id)
+                payment_url = request.build_absolute_uri(reverse('user_payment_initiate'))
                 
                 response_payload = {
                     "order_id": order.id,
@@ -255,7 +252,15 @@ def list_user_orders_api(request):
         return Response({"error": "Valid User/User ID required for order access"}, status=status.HTTP_400_BAD_REQUEST)
         
     paginator = CursorPagination()
-    paginator.ordering = '-created_at'  # Ensure consistent ordering
+    # Ensure page size is set if not default
+    paginator.page_size = 10 
+    paginator.ordering = '-created_at' 
+    
+    # paginate_queryset returns the list of items for the page
     result_page = paginator.paginate_queryset(orders, request)
+    
+    # Serializer should be instantiated with the result_page (list of model instances)
     serializer = OrderSerializer(result_page, many=True)
+    
+    # get_paginated_response uses internal state set by paginate_queryset
     return paginator.get_paginated_response(serializer.data)

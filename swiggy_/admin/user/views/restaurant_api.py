@@ -21,10 +21,20 @@ def list_restaurants_api(request):
     if min_rating:
         restaurants = restaurants.filter(rating__gte=min_rating)
     # Pass lat/lng to serializer context for distance calculation
+    # Pass lat/lng to serializer context for distance calculation
     paginator = LimitOffsetPagination()
+    # Set default limit to avoid None return if limit param is missing
+    paginator.default_limit = 10 
+    
     result_page = paginator.paginate_queryset(restaurants, request)
-    serializer = RestaurantListSerializer(result_page, many=True, context={'lat': lat, 'lng': lng, 'request': request})
-    return paginator.get_paginated_response(serializer.data)
+    
+    if result_page is not None:
+        serializer = RestaurantListSerializer(result_page, many=True, context={'lat': lat, 'lng': lng, 'request': request})
+        return paginator.get_paginated_response(serializer.data)
+        
+    # Fallback if pagination is not applied (though default_limit ensures it usually is)
+    serializer = RestaurantListSerializer(restaurants, many=True, context={'lat': lat, 'lng': lng, 'request': request})
+    return Response(serializer.data)
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])

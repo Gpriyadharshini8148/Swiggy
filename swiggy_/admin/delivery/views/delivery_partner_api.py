@@ -7,6 +7,11 @@ from admin.access.permissions import IsAuthenticatedUser
 from django.utils import timezone
 from admin.user.models import Notification
 from admin.delivery.models import Invoice
+from rest_framework.parsers import MultiPartParser
+from django.http import HttpResponse
+from tablib import Dataset
+from admin.delivery.admin import DeliveryPartnerResource
+
 class DeliveryPartnerViewSet(viewsets.ModelViewSet):
     queryset = DeliveryPartner.objects.all()
     serializer_class = DeliveryPartnerSerializer
@@ -136,3 +141,62 @@ class DeliveryPartnerViewSet(viewsets.ModelViewSet):
         except Delivery.DoesNotExist:
              return Response({"error": "Delivery task not found for this partner"}, status=404)
 
+    @action(detail=False, methods=['get'])
+    def export_csv(self, request):
+        user = request.user
+        role = getattr(user, 'role', None)
+
+        if getattr(user, 'is_superuser', False) or role in ['SUPERADMIN', 'DELIVERY_ADMIN']:
+            queryset = DeliveryPartner.objects.all()
+        else:
+            return Response({"error": "Permission denied."}, status=403)
+
+        resource = DeliveryPartnerResource()
+        dataset = resource.export(queryset)
+        
+        export_format = request.query_params.get('format', 'csv')
+        if export_format == 'xlsx':
+            response = HttpResponse(dataset.xlsx, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            response['Content-Disposition'] = 'attachment; filename="delivery_partners.xlsx"'
+        elif export_format == 'xls':
+            response = HttpResponse(dataset.xls, content_type='application/vnd.ms-excel')
+            response['Content-Disposition'] = 'attachment; filename="delivery_partners.xls"'
+        else:
+            response = HttpResponse(dataset.csv, content_type='text/csv')
+            response['Content-Disposition'] = 'attachment; filename="delivery_partners.csv"'
+        return response
+
+    @action(detail=False, methods=['post'], parser_classes=[MultiPartParser])
+    def import_csv(self, request):
+        user = request.user
+        role = getattr(user, 'role', None)
+        
+        if not (getattr(user, 'is_superuser', False) or role in ['SUPERADMIN', 'DELIVERY_ADMIN']):
+            return Response({"error": "Permission denied."}, status=403)
+
+        file = request.FILES.get('file')
+        if not file:
+            return Response({"error": "No file uploaded"}, status=400)
+
+        dataset = Dataset()
+        try:
+            file_extension = file.name.split('.')[-1].lower() if '.' in file.name else 'csv'
+            if file_extension in ['xlsx', 'xls']:
+                dataset.load(file.read(), format=file_extension)
+            else:
+                dataset.load(file.read().decode('utf-8'), format='csv')
+        except Exception as e:
+            return Response({"error": f"Failed to parse file: {str(e)}"}, status=400)
+        
+        resource = DeliveryPartnerResource()
+        result = resource.import_data(dataset, dry_run=True)
+        
+        if not result.has_errors():
+            resource.import_data(dataset, dry_run=False)
+            return Response({"message": f"Successfully imported {len(dataset)} delivery partners."})
+        else:
+            errors = []
+            for i, row_errors in enumerate(result.row_errors()):
+                for error in row_errors[1]:
+                    errors.append(f"Row {row_errors[0]}: {str(error.error)}")
+            return Response({"error": "Import failed", "details": errors}, status=400)

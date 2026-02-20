@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Users, Address, Wishlist, Rewards, City, State
+from .models import Users, Address, Wishlist, Rewards, City, State, Images
 from admin.restaurants.models.restaurant import Restaurant
 from django.contrib.auth.models import User as AdminUser
 from django.contrib.auth.hashers import check_password
@@ -302,3 +302,9 @@ class RestaurantSignupSerializer(serializers.Serializer):
             
         return data
 
+
+class ImagesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Images
+        fields = ['id', 'name', 'image', 'description', 'created_at']
+        read_only_fields = ['created_at']
