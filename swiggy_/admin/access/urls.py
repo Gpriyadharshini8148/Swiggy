@@ -42,7 +42,6 @@ urlpatterns = [
     path('create_account_by_super_admin/', AuthViewSet.as_view({'post': 'create_account_by_super_admin'}), name='create-account-by-super-admin'),
     path('restaurant_signup/', AuthViewSet.as_view({'post': 'restaurant_signup'}), name='restaurant-signup'),
     path('logout/', AuthViewSet.as_view({'post': 'logout'}), name='logout'),
-    path('users/', UsersViewSet.as_view({'get': 'list', 'post': 'create'}), name='users-list-create'),
     path('image/upload/', upload_image_api, name='upload-image'),
     path('images/', list_images_api, name='list-images'),
 ]

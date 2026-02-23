@@ -6,6 +6,7 @@ from drf_yasg import openapi
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
+from admin.import_export_api import GenericImportAPIView, GenericExportAPIView
 
 schema_view = get_schema_view(
    openapi.Info(
@@ -42,6 +43,10 @@ urlpatterns = [
     re_path(r'^swagger(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name='schema-json'),
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
+    
+    # Unified Import/Export APIs
+    path('import/<str:model_name>/', GenericImportAPIView.as_view(), name='import-generic'),
+    path('export/<str:model_name>/', GenericExportAPIView.as_view(), name='export-generic'),
     
     # Legacy/Unified Paths
     path('api/auth/', include('admin.access.urls')),

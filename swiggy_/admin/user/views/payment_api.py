@@ -52,12 +52,10 @@ def initiate_payment_api(request):
             "razorpay_order_id": razorpay_order['id'],
             "amount": order.total_amount,
             "currency": "INR",
-            "key_id": settings.RAZORPAY_KEY_ID,
             "razorpay_options": {
-                "key": settings.RAZORPAY_KEY_ID,
                 "amount": razorpay_amount,
                 "currency": "INR",
-                "name": "Swiggy Clone",
+                "name": "Swiggy",
                 "description": f"Order #{order.id}",
                 "order_id": razorpay_order['id'],
                 "prefill": {
