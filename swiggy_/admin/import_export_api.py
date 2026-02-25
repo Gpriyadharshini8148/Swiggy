@@ -6,16 +6,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser
 from django.http import HttpResponse
 from tablib import Dataset
-
-# Access
 from admin.access.models import Users, Address, Rewards, Wishlist, State, City, Images
 from admin.access.admin import UsersResource, AddressResource, RewardsResource, WishlistResource, StateResource, CityResource, ImagesResource
-
-# Restaurants
 from admin.restaurants.models import Restaurant, FoodItem, Coupon, Category, SubCategory
 from admin.restaurants.admin import RestaurantResource, FoodItemResource, CouponResource, CategoryResource, SubCategoryResource
-
-# Delivery
 from admin.delivery.models import DeliveryPartner, Orders, OrderItem
 from admin.delivery.admin import DeliveryPartnerResource, OrdersResource, OrderItemResource
 

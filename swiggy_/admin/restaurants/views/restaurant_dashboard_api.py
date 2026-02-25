@@ -112,8 +112,10 @@ class RestaurantDashboardViewSet(viewsets.ViewSet):
              return Response({"error": "Status is required"}, status=status.HTTP_400_BAD_REQUEST)
              
         new_status = new_status.upper()
-        if new_status not in dict(Orders.ORDER_STATUS_CHOICES):
-             return Response({"error": "Invalid Status"}, status=status.HTTP_400_BAD_REQUEST)
+        allowed_statuses = ['ACCEPTED', 'PREPARING', 'READY', 'CANCELLED']
+        if new_status not in allowed_statuses:
+             return Response({"error": f"Invalid Status. Restaurants can only update to: {', '.join(allowed_statuses)}"}, status=status.HTTP_400_BAD_REQUEST)
+
         # Logic for timestamp updates
         if new_status == 'ACCEPTED':
             if order.order_status != 'PENDING':
@@ -134,17 +136,26 @@ class RestaurantDashboardViewSet(viewsets.ViewSet):
             # Generate 6-digit OTP
             order.handover_otp = f"{random.randint(100000, 999999)}" 
             # In a real app, you would send this OTP to the delivery partner via notification/SMS here.
-        elif new_status == 'PICKED_UP':
-             order.pickup_timestamp = timezone.now()
-             # Logic to assign delivery partner could be triggered here or separate
-        elif new_status == 'DELIVERED':
-             order.delivered_timestamp = timezone.now()
-             order.payment_status = 'PAID' # Assuming Prepaid settled
         
         order.order_status = new_status
         order.save()
         
-        return Response({"message": f"Order status updated to {new_status}"})
+        delivery_partner_id = None
+        if hasattr(order, 'delivery_partner') and order.delivery_partner:
+             delivery_partner_id = order.delivery_partner.id
+        if not delivery_partner_id:
+             from admin.delivery.models import Delivery
+             delivery = Delivery.objects.filter(order=order).first()
+             if delivery and delivery.delivery_partner:
+                  delivery_partner_id = delivery.delivery_partner.id
+        
+        return Response({
+            "message": f"Order status updated to {new_status}",
+            "order_id": order.id,
+            "status": order.order_status,
+            "user_id": order.user.id if order.user else None,
+            "delivery_partner_id": delivery_partner_id
+        })
 
     @action(detail=False, methods=['get'])
     def dashboard_stats(self, request):

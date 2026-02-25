@@ -8,13 +8,13 @@ from admin.access.permissions import IsAuthenticatedUser
 from admin.access.models import Users
 from admin.restaurants.models import Cart
 from django.db import transaction
+from django.db.models import Count, Q
+from django.contrib.gis.db.models.functions import Distance
 from django.conf import settings
 import razorpay
-from admin.delivery.models import Delivery
-from rest_framework.parsers import MultiPartParser
-from django.http import HttpResponse
-from tablib import Dataset
-from admin.delivery.admin import OrdersResource
+from django.utils import timezone
+from admin.delivery.models import Delivery, DeliveryPartner
+
 client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
 
 class OrdersViewSet(viewsets.ModelViewSet):
@@ -51,6 +51,10 @@ class OrdersViewSet(viewsets.ModelViewSet):
 
         if role in ['ADMIN', 'SUPERADMIN']:
             return Orders.objects.all()
+        elif role in ['DELIVERY_ADMIN', 'DELIVERY_PARTNER']:
+            return Orders.objects.filter(delivery__delivery_partner__user_id=user_id)
+        elif role in ['RESTAURANT', 'RESTAURANT_ADMIN']:
+            return Orders.objects.filter(restaurant__user_id=user_id)
         else:
             return Orders.objects.filter(user_id=user_id)
     @action(detail=False, methods=['post'])
@@ -198,79 +202,219 @@ class OrdersViewSet(viewsets.ModelViewSet):
             'delivery_partner_name': delivery_partner_name
         })
 
-    @action(detail=False, methods=['get'])
-    def export_csv(self, request):
-        user = request.user
-        role = getattr(user, 'role', None)
-
-        if getattr(user, 'is_superuser', False) or role == 'SUPERADMIN':
-            queryset = Orders.objects.all()
-        elif role in ['RESTAURANT', 'RESTAURANT_ADMIN']:
-            queryset = Orders.objects.filter(restaurant__user=user)
-        elif role == 'DELIVERY_ADMIN':
-            queryset = Orders.objects.filter(delivery__isnull=False)
-        else:
-            return Response({"error": "Permission denied."}, status=403)
-
-        resource = OrdersResource()
-        dataset = resource.export(queryset)
-        
-        export_format = request.query_params.get('format', 'csv')
-        if export_format == 'xlsx':
-            response = HttpResponse(dataset.xlsx, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-            response['Content-Disposition'] = 'attachment; filename="orders.xlsx"'
-        elif export_format == 'xls':
-            response = HttpResponse(dataset.xls, content_type='application/vnd.ms-excel')
-            response['Content-Disposition'] = 'attachment; filename="orders.xls"'
-        else:
-            response = HttpResponse(dataset.csv, content_type='text/csv')
-            response['Content-Disposition'] = 'attachment; filename="orders.csv"'
-        return response
-
-    @action(detail=False, methods=['post'], parser_classes=[MultiPartParser])
-    def import_csv(self, request):
+    @action(detail=True, methods=['post'])
+    def auto_assign_partner(self, request, pk=None):
         user = request.user
         role = getattr(user, 'role', None)
         
-        if not (getattr(user, 'is_superuser', False) or role in ['SUPERADMIN', 'RESTAURANT', 'RESTAURANT_ADMIN', 'DELIVERY_ADMIN']):
-            return Response({"error": "Permission denied."}, status=403)
+        # Verify permissions: only Super Admins or Delivery Admins can trigger this
+        if not getattr(user, 'is_superuser', False) and role not in ['SUPERADMIN', 'DELIVERY_ADMIN']:
+            return Response({"error": "Permission denied. Only Delivery Admins can auto-assign orders."}, status=403)
+            
+        order = self.get_object()
+        
+        # Check order status
+        if order.order_status not in ['PENDING', 'ACCEPTED', 'PREPARING', 'READY']:
+            return Response({"error": f"Cannot assign partner to order with current status: {order.order_status}"}, status=400)
+            
+        # Check if already assigned
+        existing_delivery = Delivery.objects.filter(order=order).first()
+        if existing_delivery and existing_delivery.delivery_partner:
+            return Response({"error": f"Order is already assigned to {existing_delivery.delivery_partner.name}"}, status=400)
+            
+        # Determine the target location for distance calculation (customer address)
+        customer_location = None
+        if order.address and order.address.location:
+             customer_location = order.address.location
+        elif order.restaurant and order.restaurant.location:
+             # Fallback to restaurant location if no customer location is set
+             customer_location = order.restaurant.location
 
-        file = request.FILES.get('file')
-        if not file:
-            return Response({"error": "No file uploaded"}, status=400)
+        if not customer_location:
+             return Response({"error": "Cannot determine destination location to find nearest partner"}, status=400)
 
-        dataset = Dataset()
+        # 1. Filter: active, available partners who have a valid location
+        partners = DeliveryPartner.objects.filter(is_active=True, is_available=True, current_location__isnull=False)
+        
+        # 2. Annotate: active orders count (Deliveries that are not delivered/cancelled)
+        partners = partners.annotate(
+            active_orders_count=Count('delivery', filter=~Q(delivery__delivery_status__in=['DELIVERED', 'CANCELLED']))
+        )
+        
+        # 3. Annotate: distance to customer
+        partners = partners.annotate(
+            distance=Distance('current_location', customer_location)
+        )
+
+        # 4. Sort: First by fewest active orders, then by closest distance
+        partners = partners.order_by('active_orders_count', 'distance')
+        
+        best_partner = partners.first()
+        
+        if not best_partner:
+             return Response({"error": "No available delivery partners found online with valid locations."}, status=404)
+
+        # Assign order to the absolute best partner
+        with transaction.atomic():
+            delivery, created = Delivery.objects.get_or_create(order=order, defaults={
+                'delivery_status': 'ASSIGNED',
+                'delivery_partner': best_partner
+            })
+
+            if not created:
+                delivery.delivery_partner = best_partner
+                delivery.delivery_status = 'ASSIGNED'
+                delivery.save()
+
+            order.order_status = 'ASSIGNED'
+            order.delivery_partner = best_partner
+            order.save()
+
+            # Optional formatted distance message logic
+            dist_str = "Unknown"
+            if hasattr(best_partner.distance, 'm'):
+                 dist_m = best_partner.distance.m
+                 if dist_m < 1000:
+                      dist_str = f"{round(dist_m)} meters"
+                 else:
+                      dist_str = f"{round(dist_m/1000, 2)} km"
+
+        return Response({
+            "message": "Order successfully assigned to the optimal delivery partner",
+            "partner_id": best_partner.id,
+            "partner_name": best_partner.name,
+            "active_orders": getattr(best_partner, 'active_orders_count', 0),
+            "distance": dist_str
+        }, status=200)
+
+    @action(detail=False, methods=['post'])
+    def assign_partner(self, request):
+        user = request.user
+        role = getattr(user, 'role', None)
+        
+        # Verify permissions: only Super Admins or Delivery Admins can trigger this
+        if not getattr(user, 'is_superuser', False) and role not in ['SUPERADMIN', 'DELIVERY_ADMIN']:
+            return Response({"error": "Permission denied. Only Admins can manually assign orders."}, status=403)
+            
+        delivery_partner_id = request.data.get('delivery_partner_id')
+        user_id = request.data.get('user_id')
+        order_id = request.data.get('order_id')
+        
+        if not all([delivery_partner_id, user_id, order_id]):
+            return Response({"error": "delivery_partner_id, user_id, and order_id are required fields."}, status=400)
+            
         try:
-            file_extension = file.name.split('.')[-1].lower() if '.' in file.name else 'csv'
-            if file_extension in ['xlsx', 'xls']:
-                dataset.load(file.read(), format=file_extension)
-            else:
-                dataset.load(file.read().decode('utf-8'), format='csv')
-        except Exception as e:
-            return Response({"error": f"Failed to parse file: {str(e)}"}, status=400)
+            order = Orders.objects.get(id=order_id)
+        except Orders.DoesNotExist:
+            return Response({"error": "Order not found for the given order_id"}, status=404)
             
-        # Security overrides
-        is_super = getattr(user, 'is_superuser', False) or role in ['SUPERADMIN', 'DELIVERY_ADMIN']
-        if not is_super and role in ['RESTAURANT', 'RESTAURANT_ADMIN']:
-            # Force all imported orders to belong to this user's restaurant
-            from admin.restaurants.models import Restaurant
-            user_restaurant = Restaurant.objects.filter(user=user).first()
-            if not user_restaurant:
-                return Response({"error": "No restaurant associated with your account."}, status=400)
+        try:
+            partner = DeliveryPartner.objects.get(id=delivery_partner_id)
+        except DeliveryPartner.DoesNotExist:
+            return Response({"error": "Delivery partner not found"}, status=404)
             
-            if 'restaurant' in dataset.headers:
-                del dataset['restaurant']
-            dataset.append_col([user_restaurant.id] * len(dataset), header='restaurant')
+        # Assign order explicitly to the given partner
+        with transaction.atomic():
+            delivery, created = Delivery.objects.get_or_create(order=order, defaults={
+                'delivery_status': 'ASSIGNED',
+                'delivery_partner': partner
+            })
+
+            if not created:
+                if delivery.delivery_partner and delivery.delivery_partner != partner:
+                    return Response({"error": f"Order is already assigned to another partner: {delivery.delivery_partner.name}"}, status=400)
+                delivery.delivery_partner = partner
+                delivery.delivery_status = 'ASSIGNED'
+                delivery.save()
+
+            order.order_status = 'ASSIGNED'
+            order.delivery_partner = partner
+            order.save()
+            
+        # Gather info for the response
+        location = "Unknown"
+        if order.address:
+            location = f"{order.address.address_line_1}, {order.address.city.name}, {order.address.state.name}"
+        elif order.restaurant:
+            location = order.restaurant.location
+            
+        # Get food items
+        food_items = OrderItem.objects.filter(order=order)
+        food_item_details = [
+            {"food_name": item.food_name, "quantity": item.quantity, "price": str(item.price)}
+            for item in food_items
+        ]
         
-        resource = OrdersResource()
-        result = resource.import_data(dataset, dry_run=True)
+        order_details = {
+            "order_id": order.id,
+            "total_amount": str(order.total_amount),
+            "order_status": order.order_status,
+            "payment_status": order.payment_status,
+            "restaurant_name": order.restaurant.name if order.restaurant else "Unknown"
+        }
+
+        return Response({
+            "message": "Delivery partner successfully assigned to order",
+            "assignment_details": {
+                "delivery_partner_name": partner.name,
+                "delivery_partner_phone": partner.phone
+            },
+            "location": location,
+            "food_item_details": food_item_details,
+            "order_details": order_details
+        }, status=200)
+
+    @action(detail=True, methods=['patch', 'post'])
+    def update_status(self, request, pk=None):
+        order = self.get_object()
+        new_status = request.data.get('status')
+        user = request.user
+        role = getattr(user, 'role', None)
+
+        if not new_status:
+            return Response({"error": "status is required in request body"}, status=400)
+            
+        allowed_statuses = ['REACHED_RESTAURANT', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED']
+        if new_status not in allowed_statuses:
+            return Response({"error": f"Delivery partners can only update status to: {', '.join(allowed_statuses)}"}, status=400)
+
+        # Role checks
+        is_superuser = getattr(user, 'is_superuser', False) or role == 'SUPERADMIN'
+        delivery_roles = ['DELIVERY_PARTNER', 'DELIVERY_ADMIN']
+
+        if not is_superuser and role not in delivery_roles:
+            return Response({"error": "Only delivery staff can transition to this status"}, status=403)
         
-        if not result.has_errors():
-            resource.import_data(dataset, dry_run=False)
-            return Response({"message": f"Successfully imported {len(dataset)} orders."})
-        else:
-            errors = []
-            for i, row_errors in enumerate(result.row_errors()):
-                for error in row_errors[1]:
-                    errors.append(f"Row {row_errors[0]}: {str(error.error)}")
-            return Response({"error": "Import failed", "details": errors}, status=400)
+        # Update timestamp and status logic
+        if new_status == 'PICKED_UP':
+            order.pickup_timestamp = timezone.now()
+        elif new_status == 'DELIVERED':
+            order.delivered_timestamp = timezone.now()
+
+        order.order_status = new_status
+        order.save()
+        
+        # Keep Delivery object status in sync
+        delivery = Delivery.objects.filter(order=order).first()
+        if delivery:
+            delivery.delivery_status = new_status
+            if new_status == 'DELIVERED':
+                delivery.delivered_at = timezone.now()
+            delivery.save()
+
+        # Build response message exactly mapping to steps described
+        status_messages = {
+            'REACHED_RESTAURANT': 'Delivery partner has reached the restaurant.',
+            'PICKED_UP': 'Food has been picked up by the delivery partner.',
+            'OUT_FOR_DELIVERY': 'Delivery partner is out for delivery.',
+            'DELIVERED': 'Order has been delivered successfully to the customer.'
+        }
+        message = status_messages.get(new_status, f"Order status successfully updated to {new_status}")
+
+        return Response({
+            "message": message,
+            "order_id": order.id,
+            "order_status": order.order_status,
+            "user_id": order.user.id if order.user else None,
+            "restaurant_id": order.restaurant.id if order.restaurant else None
+        }, status=200)

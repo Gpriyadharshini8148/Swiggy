@@ -226,14 +226,51 @@ def get_order_status_api(request, order_id):
         else:
              return Response({"error": "Valid User/User ID required for order access"}, status=status.HTTP_400_BAD_REQUEST)
 
+        delivery_partner_id = None
+        if hasattr(order, 'delivery_partner') and order.delivery_partner:
+             delivery_partner_id = order.delivery_partner.id
+        if not delivery_partner_id:
+             from admin.delivery.models import Delivery
+             delivery = Delivery.objects.filter(order=order).first()
+             if delivery and delivery.delivery_partner:
+                  delivery_partner_id = delivery.delivery_partner.id
+                  
         return Response({
             "order_id": order.id,
             "status": order.order_status,
             "payment_status": order.payment_status,
-            "delivery_partner": None, # order.delivery_partner field does not exist yet
+            "restaurant_id": order.restaurant.id if order.restaurant else None,
+            "delivery_partner_id": delivery_partner_id,
         })
     except Orders.DoesNotExist:
         return Response({"error": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def cancel_order_api(request, order_id):
+    try:
+        from admin.access.models import Users
+    except ImportError:
+        pass
+        
+    try:
+        if isinstance(request.user, Users):
+            order = Orders.objects.get(id=order_id, user=request.user)
+        elif getattr(request.user, 'role', None) == 'SUPERADMIN' or getattr(request.user, 'is_superuser', False):
+            order = Orders.objects.get(id=order_id)
+        else:
+            return Response({"error": "Valid User/User ID required for order access"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if order.order_status in ['PENDING', 'ACCEPTED']:
+            order.order_status = 'CANCELLED'
+            order.save()
+            return Response({"message": "Order cancelled successfully.", "order_id": order.id, "status": order.order_status}, status=status.HTTP_200_OK)
+        else:
+            return Response({"error": "Cannot cancel order. Restaurant has already started preparing."}, status=status.HTTP_400_BAD_REQUEST)
+
+    except Orders.DoesNotExist:
+        return Response({"error": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
+
 
 
 @api_view(['GET'])

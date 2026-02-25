@@ -5,10 +5,7 @@ from admin.access.models import Users
 from admin.access.serializers import UsersSerializer
 from ..permissions import IsAdmin, IsAuthenticatedUser
 from django.contrib.auth.hashers import make_password
-from rest_framework.parsers import MultiPartParser
-from django.http import HttpResponse
-from tablib import Dataset
-from admin.access.admin import UsersResource
+
 
 class UsersViewSet(viewsets.ModelViewSet):
     queryset = Users.objects.all()
@@ -102,54 +99,4 @@ class UsersViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
 
-    @action(detail=False, methods=['get'])
-    def export_data(self, request):
-        if not getattr(request.user, 'is_superuser', False):
-            return Response({"error": "Permission denied. Superadmin only."}, status=status.HTTP_403_FORBIDDEN)
-            
-        export_format = request.query_params.get('format', 'csv')
-        users_resource = UsersResource()
-        dataset = users_resource.export(self.get_queryset())
-        
-        if export_format == 'xlsx':
-            response = HttpResponse(dataset.xlsx, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-            response['Content-Disposition'] = 'attachment; filename="users.xlsx"'
-        elif export_format == 'xls':
-            response = HttpResponse(dataset.xls, content_type='application/vnd.ms-excel')
-            response['Content-Disposition'] = 'attachment; filename="users.xls"'
-        else:
-            response = HttpResponse(dataset.csv, content_type='text/csv')
-            response['Content-Disposition'] = 'attachment; filename="users.csv"'
-        return response
 
-    @action(detail=False, methods=['post'], parser_classes=[MultiPartParser])
-    def import_data(self, request):
-        if not getattr(request.user, 'is_superuser', False):
-            return Response({"error": "Permission denied. Superadmin only."}, status=status.HTTP_403_FORBIDDEN)
-            
-        file = request.FILES.get('file')
-        if not file:
-            return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
-
-        dataset = Dataset()
-        try:
-            file_extension = file.name.split('.')[-1].lower() if '.' in file.name else 'csv'
-            if file_extension in ['xlsx', 'xls']:
-                dataset.load(file.read(), format=file_extension)
-            else:
-                dataset.load(file.read().decode('utf-8'), format='csv')
-        except Exception as e:
-            return Response({"error": f"Failed to parse file: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
-            
-        users_resource = UsersResource()
-        result = users_resource.import_data(dataset, dry_run=True)
-        
-        if not result.has_errors():
-            users_resource.import_data(dataset, dry_run=False)
-            return Response({"message": f"Successfully imported {len(dataset)} users."})
-        else:
-            errors = []
-            for i, row_errors in enumerate(result.row_errors()):
-                for error in row_errors[1]:
-                    errors.append(f"Row {row_errors[0]}: {str(error.error)}")
-            return Response({"error": "Import failed", "details": errors}, status=status.HTTP_400_BAD_REQUEST)

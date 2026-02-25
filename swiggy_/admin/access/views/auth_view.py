@@ -10,7 +10,7 @@ from admin.access.models import Users, City, State
 from admin.access.serializers import (
     VerifyOtpSerializer, LoginSerializer, UnifiedLoginSerializer, 
     SignupSerializer, LogoutSerializer, CreateAccountSerializer, 
-    UsersSerializer, RestaurantSignupSerializer
+    UsersSerializer, RestaurantSignupSerializer, DeliverySignupSerializer
 )
 from admin.access.permissions import IsSuperAdmin, IsAdmin
 from django.shortcuts import render
@@ -238,7 +238,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @swagger_auto_schema(request_body=CreateAccountSerializer)
-    @action(detail=False, methods=['post'], permission_classes=[IsAdmin])
+    @action(detail=False, methods=['post'], permission_classes=[IsAdmin], url_path='create_account_by_super_admin')
     def create_account_by_super_admin(self, request):
         serializer = CreateAccountSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -568,4 +568,112 @@ class AuthViewSet(viewsets.GenericViewSet):
         except Exception as e:
             return Response({"error": "Invalid or expired link"}, status=status.HTTP_400_BAD_REQUEST)
 
+    @swagger_auto_schema(request_body=DeliverySignupSerializer)
+    @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny], authentication_classes=[])
+    def delivery_signup(self, request):
+        serializer = DeliverySignupSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        username = serializer.validated_data['username']
+        password = serializer.validated_data['password']
+        partner_name = serializer.validated_data['partner_name']
+        vehicle_type = serializer.validated_data.get('vehicle_type', 'BIKE')
+        vehicle_number = serializer.validated_data.get('vehicle_number', '')
+        license_number = serializer.validated_data.get('license_number', '')
+        
+        email = None
+        phone = None
+        if '@' in username:
+            email = username
+        else:
+            phone = username
+            
+        verification_data = {
+            'email': email,
+            'phone': phone,
+            'password_hash': make_password(password),
+            'partner_name': partner_name,
+            'vehicle_type': vehicle_type,
+            'vehicle_number': vehicle_number,
+            'license_number': license_number,
+            'role': 'DELIVERY_ADMIN'
+        }
+        
+        # Super Admin retrieval
+        super_admin = Users.objects.filter(role='SUPERADMIN').first()
+        super_admin_email = None
+        
+        if super_admin and super_admin.email:
+            super_admin_email = super_admin.email
+        else:
+            # Fallback to Django Superuser
+            django_superuser = AdminUser.objects.filter(is_superuser=True).first()
+            if django_superuser and django_superuser.email:
+                super_admin_email = django_superuser.email
+            else:
+                super_admin_email = settings.EMAIL_HOST_USER
+                
+        if not super_admin_email:
+             return Response({"error": "Super Admin not configured or no email found to send request."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+        token = signing.dumps(verification_data)
+        approve_link = f"{request.scheme}://{request.get_host()}/auth/account_creation_by_super_admin/approve_delivery/?token={token}"
+        reject_link = f"{request.scheme}://{request.get_host()}/auth/account_creation_by_super_admin/reject_delivery/?token={token}"
+        
+        delivery_request_email.send(
+            sender=self.__class__, 
+            super_admin_email=super_admin_email, 
+            partner_name=partner_name, 
+            approve_link=approve_link, 
+            reject_link=reject_link
+        )
+        
+        return Response({"message": "Delivery partner signup request sent to Super Admin for approval."}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.AllowAny], authentication_classes=[])
+    def approve_delivery(self, request):
+        token = request.query_params.get('token')
+        if not token:
+            return Response({"error": "Token is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            data = signing.loads(token, max_age=259200) # 3 days validity
+            
+            # Check if user already exists
+            query = Q()
+            if data.get('email'):
+                query |= Q(email=data['email'])
+            if data.get('phone'):
+                query |= Q(phone=data['phone'])
+                
+            if query and Users.objects.filter(query).exists():
+                 return Response({"message": "User for this delivery partner already exists."}, status=status.HTTP_200_OK)
+
+            # Store in cache instead of DB
+            username = data.get('email') or data.get('phone')
+            activation_data = {
+                'type': 'delivery',
+                'data': data
+            }
+            cache.set(f"approved_activation_{username}", activation_data, timeout=259200)
+            
+            return Response({"message": f"Delivery partner '{data['partner_name']}' approved. You can now log in to activate the account and delivery profile."}, status=status.HTTP_200_OK)
+            
+        except signing.SignatureExpired:
+             return Response({"error": "Link has expired"}, status=status.HTTP_400_BAD_REQUEST)
+        except signing.BadSignature:
+             return Response({"error": "Invalid link"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+             return Response({"error": f"Approval failed: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.AllowAny], authentication_classes=[])
+    def reject_delivery(self, request):
+        token = request.query_params.get('token')
+        if not token:
+            return Response({"error": "Token is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            data = signing.loads(token, max_age=259200)
+            return Response({"message": f"Delivery partner request for '{data['partner_name']}' has been rejected."}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": "Invalid or expired link"}, status=status.HTTP_400_BAD_REQUEST)

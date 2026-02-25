@@ -9,7 +9,7 @@ from .views import (
     push_notification_api, list_notifications_api, get_notification_detail_api,
     submit_review_api, restaurant_reviews_api,
     food_items_api, user_profile_api,
-    initiate_payment_api, confirm_payment_api
+    initiate_payment_api, confirm_payment_api, cancel_order_api
 )
 
 urlpatterns = [
@@ -43,6 +43,7 @@ urlpatterns = [
     path('orders/create/', place_order_api, name='user_place_order'),
     path('orders/history/', list_user_orders_api, name='user_orders_history'),
     path('orders/<int:order_id>/status/', get_order_status_api, name='user_order_status'),
+    path('orders/<int:order_id>/cancel/', cancel_order_api, name='user_cancel_order'),
     
     # Payments
     path('payments/initiate/', initiate_payment_api, name='user_payment_initiate'), 

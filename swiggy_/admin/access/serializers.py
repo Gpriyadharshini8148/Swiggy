@@ -133,8 +133,20 @@ class UnifiedLoginSerializer(serializers.Serializer):
                             category=data.get('category'),
                             is_active=True
                         )
+                    elif act_type == 'delivery':
+                        user.save()
+                        DeliveryPartner.objects.create(
+                            user=user,
+                            name=data['partner_name'],
+                            phone=user.phone,
+                            email=user.email,
+                            vehicle_type=data.get('vehicle_type'),
+                            vehicle_number=data.get('vehicle_number'),
+                            license_number=data.get('license_number'),
+                            is_active=True,
+                            is_verified=True
+                        )
 
-                    
                     # Clear cache
                     cache.delete(f"approved_activation_{username}")
                     attrs['user'] = user
@@ -283,6 +295,52 @@ class RestaurantSignupSerializer(serializers.Serializer):
             phone = username
             if not phone.isdigit():
                  raise serializers.ValidationError("Enter a valid phone number (digits only) or email address.")
+        if email and Users.objects.filter(email=email).exists():
+            raise serializers.ValidationError("User with this email already exists")
+            
+        if phone and Users.objects.filter(phone=phone).exists():
+            raise serializers.ValidationError("User with this phone already exists")
+            
+        password = data['password']
+        # Password complexity validation
+        password_regex = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$'
+        if not re.match(password_regex, password):
+             raise serializers.ValidationError("Password must contain at least 8 characters, one uppercase letter, one lowercase letter, one number and one special character")
+
+        try:
+            validate_password(password)
+        except Exception as e:
+            raise serializers.ValidationError(str(e))
+            
+        return data
+
+class DeliverySignupSerializer(serializers.Serializer):
+    username = serializers.CharField(max_length=100, help_text="User Email or Phone Number")
+    password = serializers.CharField(max_length=128, required=True, write_only=True)
+    partner_name = serializers.CharField(max_length=255)
+    vehicle_type = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    vehicle_number = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    license_number = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    
+    def validate(self, data):
+        username = data.get('username')
+        if not username:
+             raise serializers.ValidationError("Username is required")
+
+        email = None
+        phone = None
+        
+        if '@' in username:
+            email = username
+            # Email format validation
+            email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if not re.match(email_regex, email):
+                raise serializers.ValidationError("Enter a valid email address.")
+        else:
+            phone = username
+            if not phone.isdigit():
+                 raise serializers.ValidationError("Enter a valid phone number (digits only) or email address.")
+                 
         if email and Users.objects.filter(email=email).exists():
             raise serializers.ValidationError("User with this email already exists")
             
